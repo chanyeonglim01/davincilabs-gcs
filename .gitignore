@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+out/
+build/
+*.log
+*.log.*
+
+# Electron
+release/
+app/dist/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+
+# Misc
+*.tsbuildinfo
+.eslintcache
+.turbo
+
+# electron-builder
+dist_electron/
