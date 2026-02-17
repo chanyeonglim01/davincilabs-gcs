@@ -1,7 +1,22 @@
 # DavinciLabs GCS — 개발 진행 현황
 
 > 목표, 완료 항목, 다음 작업을 추적하는 문서.
-> 세션 시작 시 `memory/gcs_status.md`도 함께 확인.
+
+---
+
+## 문서 역할 구분
+
+| 파일 | 대상 | 목적 |
+|------|------|------|
+| `README.md` | 사람 (사용자/기여자) | 프로젝트 소개, 기능 설명, 아키텍처, 실행법 |
+| `PROGRESS.md` | 사람 (개발자) | 개발 목표, 완료 체크리스트, 다음 작업 계획 |
+| `.claude/CLAUDE.md` | Claude AI | 코딩 규칙 전용 — 기술스택 버전, 컨벤션, DO/DON'T, Pitfalls |
+| `memory/gcs_status.md` | Claude AI (세션 간) | 현재 버그 상세 명세, 수정 코드 스니펫, 에이전트 작업 계획 |
+
+**새 Claude 세션 시작 시 읽어야 할 파일**:
+1. `.claude/CLAUDE.md` — 자동 로드 (코딩 규칙)
+2. `PROGRESS.md` — 현재 어디까지 왔는지
+3. `memory/gcs_status.md` — 버그 상세 및 다음 작업 명세
 
 ---
 
