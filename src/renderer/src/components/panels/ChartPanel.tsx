@@ -207,7 +207,7 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
                       color: '#ECDFCC'
                     }}
                     labelFormatter={() => ''}
-                    formatter={(val: number) => [chart.formatter(val), '']}
+                    formatter={(val: number | undefined) => [val != null ? chart.formatter(val) : '--', '']}
                   />
                   {chart.series.map((s, si) =>
                     visible[s.key] ? (
