@@ -6,26 +6,26 @@ import { useTelemetryStore } from '@renderer/store/telemetryStore'
 const createDroneIcon = (heading: number) =>
   L.divIcon({
     html: `
-      <div style="width:40px;height:40px;transform:rotate(${heading}deg);transform-origin:center;">
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <div style="width:72px;height:72px;transform:rotate(${heading}deg);transform-origin:center;filter:drop-shadow(0 0 6px rgba(236,223,204,0.6));">
+        <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- Fuselage -->
-          <ellipse cx="20" cy="20" rx="2.5" ry="10" fill="#ECDFCC"/>
+          <ellipse cx="36" cy="36" rx="4" ry="17" fill="#ECDFCC"/>
           <!-- Main swept wings -->
-          <path d="M20 17 L3 24 L3.5 26 L20 21 L36.5 26 L37 24 Z" fill="#ECDFCC" fill-opacity="0.85"/>
+          <path d="M36 30 L4 42 L5 46 L36 37 L67 46 L68 42 Z" fill="#ECDFCC" fill-opacity="0.9"/>
           <!-- Canard (front wings) -->
-          <path d="M20 12 L12 15 L12 16.5 L20 14 L28 16.5 L28 15 Z" fill="#ECDFCC" fill-opacity="0.65"/>
+          <path d="M36 20 L22 25 L22 28 L36 23 L50 28 L50 25 Z" fill="#ECDFCC" fill-opacity="0.7"/>
           <!-- Tail fin -->
-          <path d="M20 28 L15 35 L16.5 35.5 L20 30 L23.5 35.5 L25 35 Z" fill="#ECDFCC" fill-opacity="0.6"/>
+          <path d="M36 50 L27 62 L29 63 L36 53 L43 63 L45 62 Z" fill="#ECDFCC" fill-opacity="0.65"/>
           <!-- Nose tip -->
-          <circle cx="20" cy="10" r="1.8" fill="#ECDFCC"/>
+          <circle cx="36" cy="18" r="3" fill="#ECDFCC"/>
           <!-- Engine center ring -->
-          <circle cx="20" cy="20" r="3.5" fill="#181C14" stroke="#ECDFCC" stroke-width="1" stroke-opacity="0.7"/>
-          <circle cx="20" cy="20" r="1.2" fill="#ECDFCC"/>
+          <circle cx="36" cy="36" r="6" fill="#181C14" stroke="#ECDFCC" stroke-width="1.5" stroke-opacity="0.8"/>
+          <circle cx="36" cy="36" r="2.5" fill="#ECDFCC"/>
         </svg>
       </div>
     `,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
+    iconSize: [72, 72],
+    iconAnchor: [36, 36],
     className: ''
   })
 
