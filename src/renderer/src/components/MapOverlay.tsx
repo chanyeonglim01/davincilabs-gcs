@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { Header } from './Header'
+import { Header, ViewType } from './Header'
 import { MapBackground } from './MapBackground'
 import { InstrumentsPanel } from './panels/InstrumentsPanel'
 import { AvionicsPanel } from './panels/AvionicsPanel'
 import { TelemetryPanel } from './panels/TelemetryPanel'
 import { ChartPanel } from './panels/ChartPanel'
 import { LogPanel } from './panels/LogPanel'
+import { MissionView } from './MissionView'
+import { ParameterView } from '@renderer/features/builder'
 import { useDraggable } from '@renderer/hooks/useDraggable'
 
 // ─── Draggable wrapper ─────────────────────────────────────────────────────────
@@ -24,7 +26,7 @@ function DraggablePanel({ initialX, initialY, children }: DraggablePanelProps) {
         position: 'absolute',
         left: pos.x,
         top: pos.y,
-        zIndex: 1100  // above Leaflet controls (1000)
+        zIndex: 1100
       }}
     >
       {children(onMouseDown)}
@@ -34,11 +36,12 @@ function DraggablePanel({ initialX, initialY, children }: DraggablePanelProps) {
 
 // ─── MapOverlay ────────────────────────────────────────────────────────────────
 export function MapOverlay() {
+  const [currentView, setCurrentView] = useState<ViewType>('main')
   const [collapsed, setCollapsed] = useState({
-    instruments: false,  // open: top-left
-    chart: false,        // open: below instruments on left
-    log: false,          // open: below charts on left
-    telemetry: false,    // open: right side below commands
+    instruments: false,
+    chart: false,
+    log: false,
+    telemetry: false
   })
 
   const toggle = (key: keyof typeof collapsed) =>
@@ -54,66 +57,75 @@ export function MapOverlay() {
         background: '#181C14'
       }}
     >
-      {/* Full-screen map — no stacking context wrapper, natural layer */}
-      <MapBackground />
-
       {/* Fixed header — z-index 1200 (topmost) */}
-      <Header />
+      <Header currentView={currentView} onViewChange={setCurrentView} />
 
-      {/* ── FIXED PANELS ─────────────────────────────────────────────────────── */}
-      {/* Right column: Avionics + Status stacked with consistent gap */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '68px',
-          right: '20px',
-          zIndex: 1100,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px'
-        }}
-      >
-        <AvionicsPanel />
-        <TelemetryPanel
-          onDragHandle={() => {}}
-          collapsed={collapsed.telemetry}
-          onToggle={() => toggle('telemetry')}
-        />
-      </div>
+      {/* ── MAIN VIEW ──────────────────────────────────────────────────────────── */}
+      {currentView === 'main' && (
+        <>
+          {/* Full-screen map */}
+          <MapBackground />
 
-      {/* ── DRAGGABLE PANELS ─────────────────────────────────────────────────── */}
-      {/* Top-left: Instruments (open) */}
-      <DraggablePanel initialX={20} initialY={68}>
-        {(handle) => (
-          <InstrumentsPanel
-            onDragHandle={handle}
-            collapsed={collapsed.instruments}
-            onToggle={() => toggle('instruments')}
-          />
-        )}
-      </DraggablePanel>
+          {/* Right column: Avionics + Status stacked */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '68px',
+              right: '20px',
+              zIndex: 1100,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}
+          >
+            <AvionicsPanel />
+            <TelemetryPanel
+              onDragHandle={() => {}}
+              collapsed={collapsed.telemetry}
+              onToggle={() => toggle('telemetry')}
+            />
+          </div>
 
-      {/* Left: Charts (open, below instruments) */}
-      <DraggablePanel initialX={20} initialY={290}>
-        {(handle) => (
-          <ChartPanel
-            onDragHandle={handle}
-            collapsed={collapsed.chart}
-            onToggle={() => toggle('chart')}
-          />
-        )}
-      </DraggablePanel>
+          {/* Top-left: Instruments (open) */}
+          <DraggablePanel initialX={20} initialY={68}>
+            {(handle) => (
+              <InstrumentsPanel
+                onDragHandle={handle}
+                collapsed={collapsed.instruments}
+                onToggle={() => toggle('instruments')}
+              />
+            )}
+          </DraggablePanel>
 
-      {/* Left: Log (open, below charts, same gap as Instruments→Charts) */}
-      <DraggablePanel initialX={20} initialY={624}>
-        {(handle) => (
-          <LogPanel
-            onDragHandle={handle}
-            collapsed={collapsed.log}
-            onToggle={() => toggle('log')}
-          />
-        )}
-      </DraggablePanel>
+          {/* Left: Charts */}
+          <DraggablePanel initialX={20} initialY={290}>
+            {(handle) => (
+              <ChartPanel
+                onDragHandle={handle}
+                collapsed={collapsed.chart}
+                onToggle={() => toggle('chart')}
+              />
+            )}
+          </DraggablePanel>
+
+          {/* Left: Log */}
+          <DraggablePanel initialX={20} initialY={624}>
+            {(handle) => (
+              <LogPanel
+                onDragHandle={handle}
+                collapsed={collapsed.log}
+                onToggle={() => toggle('log')}
+              />
+            )}
+          </DraggablePanel>
+        </>
+      )}
+
+      {/* ── MISSION VIEW ───────────────────────────────────────────────────────── */}
+      {currentView === 'mission' && <MissionView />}
+
+      {/* ── PARAMETER VIEW ─────────────────────────────────────────────────────── */}
+      {currentView === 'parameter' && <ParameterView />}
     </div>
   )
 }

@@ -1,18 +1,60 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import logoSrc from '@renderer/assets/images/dl_logo.png'
 
 type ConnMode = 'udp' | 'com'
+export type ViewType = 'main' | 'mission' | 'parameter'
 
 const COM_PORTS = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8']
 
-export function Header() {
+const VIEW_LABELS: Record<ViewType, string> = {
+  main: 'MAIN',
+  mission: 'MISSION',
+  parameter: 'PARAMETER'
+}
+
+interface HeaderProps {
+  currentView: ViewType
+  onViewChange: (view: ViewType) => void
+}
+
+export function Header({ currentView, onViewChange }: HeaderProps) {
   const { connection } = useTelemetryStore()
   const [mode, setMode] = useState<ConnMode>('udp')
   const [udpHost, setUdpHost] = useState('127.0.0.1')
   const [udpPort, setUdpPort] = useState('14551')
   const [comPort, setComPort] = useState('COM1')
   const [comOpen, setComOpen] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
+  const navRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setNavOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const handleConnect = async () => {
+    if (mode !== 'udp') return
+    const port = parseInt(udpPort, 10)
+    if (isNaN(port)) return
+    setConnecting(true)
+    try {
+      const result = await window.mavlink?.reconnect({ host: udpHost, port })
+      if (result && !result.success) {
+        console.error('[Header] reconnect failed:', result.error)
+      }
+    } catch (e) {
+      console.error('[Header] reconnect error:', e)
+    } finally {
+      setConnecting(false)
+    }
+  }
 
   const inputStyle: React.CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
@@ -26,7 +68,7 @@ export function Header() {
     width: '100%'
   }
 
-  const tabStyle = (active: boolean): React.CSSProperties => ({
+  const connTabStyle = (active: boolean): React.CSSProperties => ({
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '10px',
     fontWeight: 700,
@@ -51,7 +93,7 @@ export function Header() {
         right: 0,
         height: '56px',
         zIndex: 1200,
-        background: 'rgba(24, 28, 20, 0.92)',
+        background: 'rgba(24, 28, 20, 0.95)',
         borderBottom: '1px solid rgba(236, 223, 204, 0.1)',
         backdropFilter: 'blur(16px)',
         display: 'flex',
@@ -62,36 +104,112 @@ export function Header() {
         overflow: 'visible'
       }}
     >
-      {/* Left: Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-        <img
-          src={logoSrc}
-          alt="DavinciLabs"
-          style={{ height: '88px', width: 'auto', objectFit: 'contain' }}
-        />
+      {/* Left: Logo + Nav Dropdown */}
+      <div ref={navRef} style={{ display: 'flex', alignItems: 'center', flexShrink: 0, position: 'relative' }}>
+        {/* Logo — clickable */}
+        <div
+          onClick={() => setNavOpen((v) => !v)}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+        >
+          <img
+            src={logoSrc}
+            alt="DavinciLabs"
+            style={{ height: '88px', width: 'auto', objectFit: 'contain' }}
+          />
+          {/* Current view indicator */}
+          {currentView !== 'main' && (
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+                color: '#ECDFCC',
+                background: 'rgba(236, 223, 204, 0.1)',
+                border: '1px solid rgba(236, 223, 204, 0.25)',
+                borderRadius: '3px',
+                padding: '2px 8px',
+                textTransform: 'uppercase'
+              }}
+            >
+              {VIEW_LABELS[currentView]}
+            </span>
+          )}
+        </div>
+
+        {/* Dropdown */}
+        {navOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 'calc(100% - 6px)',
+              left: '8px',
+              minWidth: '160px',
+              background: 'rgba(24, 28, 20, 0.98)',
+              border: '1px solid rgba(236, 223, 204, 0.2)',
+              borderRadius: '6px',
+              overflow: 'hidden',
+              zIndex: 1300,
+              boxShadow: '0 12px 32px rgba(0,0,0,0.7)',
+              backdropFilter: 'blur(16px)'
+            }}
+          >
+            {(['main', 'mission', 'parameter'] as ViewType[]).map((v) => (
+              <div
+                key={v}
+                onClick={() => {
+                  onViewChange(v)
+                  setNavOpen(false)
+                }}
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  padding: '10px 16px',
+                  color: v === currentView ? '#ECDFCC' : 'rgba(236, 223, 204, 0.45)',
+                  background: v === currentView ? 'rgba(236, 223, 204, 0.08)' : 'transparent',
+                  cursor: 'pointer',
+                  borderLeft: v === currentView
+                    ? '2px solid #ECDFCC'
+                    : '2px solid transparent',
+                  transition: 'all 0.1s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (v !== currentView) {
+                    (e.currentTarget as HTMLDivElement).style.background = 'rgba(236, 223, 204, 0.05)'
+                    ;(e.currentTarget as HTMLDivElement).style.color = 'rgba(236, 223, 204, 0.75)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (v !== currentView) {
+                    (e.currentTarget as HTMLDivElement).style.background = 'transparent'
+                    ;(e.currentTarget as HTMLDivElement).style.color = 'rgba(236, 223, 204, 0.45)'
+                  }
+                }}
+              >
+                {VIEW_LABELS[v]}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Center: Title */}
-      <div
-        style={{
-          flex: 1,
-          textAlign: 'center',
-          pointerEvents: 'none',
-          padding: '0 20px'
-        }}
-      >
+      <div style={{ flex: 1, textAlign: 'center', pointerEvents: 'none', padding: '0 20px' }}>
         <div
           style={{
             fontFamily: "'Space Grotesk', sans-serif",
-            fontSize: '14px',
+            fontSize: '13px',
             fontWeight: 600,
-            color: 'rgba(236, 223, 204, 0.55)',
+            color: 'rgba(236, 223, 204, 0.4)',
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
             whiteSpace: 'nowrap'
           }}
         >
-          ADVANCED AIR MOBILITY GROUND CONTROL SYSTEM
+          ADVANCED AIR MOBILITY GCS
         </div>
       </div>
 
@@ -104,7 +222,7 @@ export function Header() {
           flexShrink: 0
         }}
       >
-        {/* Status indicator - LEFT of controls */}
+        {/* Status indicator */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
           <div
             style={{
@@ -133,10 +251,10 @@ export function Header() {
 
         {/* Mode tabs */}
         <div style={{ display: 'flex', gap: '4px' }}>
-          <button style={tabStyle(mode === 'udp')} onClick={() => setMode('udp')}>
+          <button style={connTabStyle(mode === 'udp')} onClick={() => setMode('udp')}>
             UDP
           </button>
-          <button style={tabStyle(mode === 'com')} onClick={() => setMode('com')}>
+          <button style={connTabStyle(mode === 'com')} onClick={() => setMode('com')}>
             COM
           </button>
         </div>
@@ -209,8 +327,7 @@ export function Header() {
                       fontSize: '11px',
                       padding: '6px 10px',
                       color: p === comPort ? '#ECDFCC' : 'rgba(236, 223, 204, 0.5)',
-                      background:
-                        p === comPort ? 'rgba(236, 223, 204, 0.08)' : 'transparent',
+                      background: p === comPort ? 'rgba(236, 223, 204, 0.08)' : 'transparent',
                       cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => {
@@ -232,6 +349,8 @@ export function Header() {
 
         {/* Connect button */}
         <button
+          onClick={handleConnect}
+          disabled={connecting}
           style={{
             fontFamily: "'JetBrains Mono', monospace",
             fontSize: '11px',
@@ -240,24 +359,27 @@ export function Header() {
             padding: '5px 14px',
             border: '1px solid rgba(236, 223, 204, 0.3)',
             borderRadius: '3px',
-            background: 'rgba(236, 223, 204, 0.06)',
-            color: '#ECDFCC',
-            cursor: 'pointer',
+            background: connecting
+              ? 'rgba(236, 223, 204, 0.14)'
+              : 'rgba(236, 223, 204, 0.06)',
+            color: connecting ? 'rgba(236, 223, 204, 0.5)' : '#ECDFCC',
+            cursor: connecting ? 'default' : 'pointer',
             textTransform: 'uppercase',
             transition: 'all 0.15s ease'
           }}
           onMouseEnter={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.background =
-              'rgba(236, 223, 204, 0.14)'
+            if (!connecting)
+              (e.currentTarget as HTMLButtonElement).style.background =
+                'rgba(236, 223, 204, 0.14)'
           }}
           onMouseLeave={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.background =
-              'rgba(236, 223, 204, 0.06)'
+            if (!connecting)
+              (e.currentTarget as HTMLButtonElement).style.background =
+                'rgba(236, 223, 204, 0.06)'
           }}
         >
-          CONNECT
+          {connecting ? '...' : 'CONNECT'}
         </button>
-
       </div>
     </header>
   )

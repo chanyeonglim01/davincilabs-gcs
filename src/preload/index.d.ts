@@ -22,6 +22,7 @@ declare global {
     mavlink: {
       // Invoke (Renderer -> Main, returns Promise)
       connect(config: ConnectionConfig): Promise<void>
+      reconnect(config: { host: string; port: number }): Promise<{ success: boolean; error?: string }>
       disconnect(): Promise<void>
       sendCommand(command: Command): Promise<CommandResult>
       requestParams(): Promise<void>

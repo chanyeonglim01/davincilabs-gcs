@@ -21,6 +21,8 @@ import type {
 const mavlinkAPI = {
   // Invoke (Renderer -> Main)
   connect: (config: ConnectionConfig): Promise<void> => ipcRenderer.invoke('mavlink:connect', config),
+  reconnect: (config: { host: string; port: number }): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('mavlink:reconnect', config),
   disconnect: (): Promise<void> => ipcRenderer.invoke('mavlink:disconnect'),
   sendCommand: (command: Command): Promise<CommandResult> => ipcRenderer.invoke('mavlink:send-command', command),
   requestParams: (): Promise<void> => ipcRenderer.invoke('mavlink:request-params'),

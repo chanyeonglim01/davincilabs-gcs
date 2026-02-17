@@ -89,6 +89,30 @@ export class MavlinkConnection extends EventEmitter {
   }
 
   /**
+   * Reconnect to a new host:port, preserving other config fields
+   */
+  async reconnect(host: string, port: number): Promise<void> {
+    // Snapshot config before disconnect clears it
+    const prevConfig = this.config
+
+    if (this._isConnected) {
+      this.disconnect()
+      // Give socket time to fully close
+      await new Promise<void>((resolve) => setTimeout(resolve, 200))
+    }
+
+    const config: ConnectionConfig = {
+      mode: prevConfig?.mode ?? 'simulink',
+      host,
+      port,
+      sysid: prevConfig?.sysid ?? 1,
+      compid: prevConfig?.compid ?? 1
+    }
+
+    await this.connect(config)
+  }
+
+  /**
    * Disconnect from MAVLink endpoint
    */
   disconnect(): void {

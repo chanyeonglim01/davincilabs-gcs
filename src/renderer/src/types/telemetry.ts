@@ -17,6 +17,7 @@ export interface PositionData {
   lon: number // degrees
   alt: number // meters AMSL
   relative_alt: number // meters AGL
+  distance_to_wp?: number // meters (optional, may not be available)
 }
 
 export interface VelocityData {
