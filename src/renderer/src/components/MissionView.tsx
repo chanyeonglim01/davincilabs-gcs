@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, ReferenceLine,
+} from 'recharts'
 import { useMissionStore, ActionKey, Waypoint } from '@renderer/store/missionStore'
 
 // ─── MAVLink command IDs ───────────────────────────────────────────────────────
@@ -646,6 +650,9 @@ export function MissionView() {
           </div>
         </div>
       </div>
+
+      {/* ── Altitude Profile Strip ──────────────────────────────────────────── */}
+      <AltitudeProfile waypoints={waypoints} />
     </div>
   )
 }
@@ -671,6 +678,209 @@ function CoordInput({ label, value, step, onChange }: { label: string; value: nu
       <input type="number" value={value} step={step}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         style={{ ...smallInput, width: '100%' }} />
+    </div>
+  )
+}
+
+// ─── Altitude Profile ──────────────────────────────────────────────────────────
+interface AltPoint {
+  dist: number      // cumulative distance (m)
+  alt: number
+  seq: number       // 1-based nav waypoint index
+  action: ActionKey
+  uid: number
+}
+
+function fmtDist(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.round(m)}m`
+}
+
+function AltitudeProfile({ waypoints }: { waypoints: Waypoint[] }) {
+  const [collapsed, setCollapsed] = useState(false)
+
+  // Only nav waypoints with altitude
+  const navWps = waypoints.filter((w) => ACTIONS[w.action].hasAlt)
+
+  // Build chart data
+  let cumDist = 0
+  const data: AltPoint[] = navWps.map((wp, i) => {
+    if (i > 0) cumDist += haversineM(navWps[i - 1], wp)
+    return { dist: cumDist, alt: wp.alt, seq: i + 1, action: wp.action, uid: wp.uid }
+  })
+
+  const CHART_H = 130
+
+  return (
+    <div
+      style={{
+        flexShrink: 0,
+        background: 'rgba(20,24,16,0.98)',
+        borderTop: '1px solid rgba(236,223,204,0.1)',
+        backdropFilter: 'blur(12px)',
+        transition: 'height 0.2s ease',
+        overflow: 'hidden',
+        height: collapsed ? '32px' : `${CHART_H + 32}px`,
+      }}
+    >
+      {/* Header row */}
+      <div
+        style={{
+          height: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 16px',
+          gap: '12px',
+          borderBottom: collapsed ? 'none' : '1px solid rgba(236,223,204,0.07)',
+        }}
+      >
+        <span style={{ fontFamily: mono, fontSize: '9px', fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(236,223,204,0.45)' }}>
+          ALTITUDE PROFILE
+        </span>
+        {navWps.length < 2 && !collapsed && (
+          <span style={{ fontFamily: mono, fontSize: '9px', color: 'rgba(236,223,204,0.2)' }}>
+            — 웨이포인트를 2개 이상 추가하면 표시됩니다
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        {/* Stats */}
+        {data.length >= 2 && (
+          <>
+            <span style={{ fontFamily: mono, fontSize: '9px', color: 'rgba(236,223,204,0.3)' }}>
+              MAX {Math.max(...data.map((d) => d.alt))}m
+            </span>
+            <span style={{ fontFamily: mono, fontSize: '9px', color: 'rgba(236,223,204,0.2)' }}>·</span>
+            <span style={{ fontFamily: mono, fontSize: '9px', color: 'rgba(236,223,204,0.3)' }}>
+              TOTAL {fmtDist(data[data.length - 1].dist)}
+            </span>
+          </>
+        )}
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          style={{
+            fontFamily: mono, fontSize: '9px', fontWeight: 700,
+            background: 'transparent', border: '1px solid rgba(236,223,204,0.15)',
+            borderRadius: '3px', color: 'rgba(236,223,204,0.4)',
+            padding: '2px 8px', cursor: 'pointer',
+          }}
+        >
+          {collapsed ? '▲' : '▼'}
+        </button>
+      </div>
+
+      {/* Chart area */}
+      {!collapsed && (
+        <div style={{ height: CHART_H, padding: '8px 8px 4px 0' }}>
+          {data.length < 1 ? null : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data} margin={{ top: 14, right: 24, bottom: 4, left: 44 }}>
+                <defs>
+                  <linearGradient id="altGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#4FC3F7" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#4FC3F7" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+
+                <XAxis
+                  dataKey="dist"
+                  type="number"
+                  domain={['dataMin', 'dataMax']}
+                  tickFormatter={(v: number) => fmtDist(v)}
+                  tick={{ fontFamily: mono, fontSize: 9, fill: 'rgba(236,223,204,0.3)' }}
+                  axisLine={{ stroke: 'rgba(236,223,204,0.1)' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  dataKey="alt"
+                  tickFormatter={(v: number) => `${v}m`}
+                  tick={{ fontFamily: mono, fontSize: 9, fill: 'rgba(236,223,204,0.3)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={40}
+                />
+
+                {/* Vertical reference lines at each waypoint */}
+                {data.map((d) => (
+                  <ReferenceLine
+                    key={d.uid}
+                    x={d.dist}
+                    stroke={ACTIONS[d.action].color}
+                    strokeOpacity={0.2}
+                    strokeDasharray="3 3"
+                  />
+                ))}
+
+                <Tooltip content={<AltTooltip />} cursor={{ stroke: 'rgba(79,195,247,0.3)', strokeWidth: 1 }} />
+
+                <Area
+                  type="monotone"
+                  dataKey="alt"
+                  stroke="#4FC3F7"
+                  strokeWidth={1.5}
+                  fill="url(#altGrad)"
+                  dot={<WaypointDot />}
+                  activeDot={{ r: 5, fill: '#4FC3F7', strokeWidth: 0 }}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Custom dot: colored circle + seq number label
+function WaypointDot(props: {
+  cx?: number; cy?: number; payload?: AltPoint
+}) {
+  const { cx = 0, cy = 0, payload } = props
+  if (!payload) return null
+  const def = ACTIONS[payload.action]
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={9} fill={def.color + '28'} stroke={def.color} strokeWidth={1.5} />
+      <text
+        x={cx} y={cy + 0.5}
+        textAnchor="middle" dominantBaseline="central"
+        fill={def.color} fontSize={8} fontWeight={700}
+        fontFamily="'JetBrains Mono',monospace"
+      >
+        {payload.seq}
+      </text>
+      {/* Altitude label above dot */}
+      <text
+        x={cx} y={cy - 14}
+        textAnchor="middle"
+        fill={altColor(payload.alt)} fontSize={8} fontWeight={700}
+        fontFamily="'JetBrains Mono',monospace"
+      >
+        {payload.alt}m
+      </text>
+    </g>
+  )
+}
+
+// Custom tooltip
+function AltTooltip({ active, payload }: { active?: boolean; payload?: { payload: AltPoint }[] }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  const def = ACTIONS[d.action]
+  return (
+    <div style={{
+      background: 'rgba(24,28,20,0.97)',
+      border: `1px solid ${def.color}60`,
+      borderRadius: '5px',
+      padding: '6px 10px',
+      fontFamily: mono,
+      fontSize: '10px',
+      pointerEvents: 'none',
+    }}>
+      <div style={{ color: def.color, fontWeight: 700, marginBottom: '3px' }}>
+        {d.seq}. {def.label}
+      </div>
+      <div style={{ color: altColor(d.alt), fontWeight: 700 }}>{d.alt} m</div>
+      <div style={{ color: 'rgba(236,223,204,0.4)', marginTop: '2px' }}>{fmtDist(d.dist)}</div>
     </div>
   )
 }
