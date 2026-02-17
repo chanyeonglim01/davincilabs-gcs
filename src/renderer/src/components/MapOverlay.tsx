@@ -3,7 +3,6 @@ import { Header } from './Header'
 import { MapBackground } from './MapBackground'
 import { InstrumentsPanel } from './panels/InstrumentsPanel'
 import { AvionicsPanel } from './panels/AvionicsPanel'
-import { CommandsPanel } from './panels/CommandsPanel'
 import { TelemetryPanel } from './panels/TelemetryPanel'
 import { ChartPanel } from './panels/ChartPanel'
 import { LogPanel } from './panels/LogPanel'
@@ -74,17 +73,6 @@ export function MapOverlay() {
         <AvionicsPanel />
       </div>
 
-      {/* Below avionics: Commands */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '300px',
-          right: '20px',
-          zIndex: 20
-        }}
-      >
-        <CommandsPanel />
-      </div>
 
       {/* ── DRAGGABLE PANELS ─────────────────────────────────────────────────── */}
       {/* Instruments - initially top-left */}
