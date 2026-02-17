@@ -61,8 +61,8 @@ davincilabs_GCS/
 
 ## 에이전트 역할 및 파일 소유권
 
-> **중요**: Frontend UI/UX (`src/renderer/src/components/**`) 수정은 **사용자가 직접 지시**합니다.
-> 팀 에이전트 자율 배정 금지. 사용자 명시 요청 시에만 작업합니다.
+> **중요**: Frontend UI/UX (`src/renderer/src/components/**`) 수정은 **사용자 지시 + `frontend-design` skill 협업**으로 진행합니다.
+> 팀 에이전트 자율 배정 금지. 사용자 요청 시 `frontend-design` skill을 호출해 UX/UI 디자이너와 함께 작업합니다.
 
 ### Agent 1 (Foundation/Architect) - Opus
 
@@ -92,7 +92,7 @@ davincilabs_GCS/
 - `src/renderer/src/hooks/useMavlink.ts`
 
 **책임**: 자세 차트, Avionics, Compass, 맵, Status Console
-**운영 방식**: 사용자가 직접 UI/UX 요구사항을 지시 → Claude가 단독 실행 (팀 에이전트 X)
+**운영 방식**: 사용자 UI/UX 요구사항 지시 → `frontend-design` skill 호출 → UX/UI 디자이너 협업 → 구현
 
 ### Agent 4 (Parameter Builder) - Sonnet
 
