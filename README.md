@@ -6,7 +6,7 @@
 
 Electron 기반 크로스 플랫폼 Ground Control Station for UAM Simulation & Real Drone
 
-[Documentation](docs/PROJECT_OVERVIEW.md) • [Tech Stack](docs/TECH_STACK.md) • [Agent Tasks](docs/AGENT_TASKS.md)
+[Getting Started](docs/USER_GUIDE.md) • [MAVLink Protocol](docs/MAVLINK_PROTOCOL.md) • [Developer Guide](docs/DEVELOPER_GUIDE.md) • [Architecture](docs/PROJECT_OVERVIEW.md) • [Tech Stack](docs/TECH_STACK.md)
 
 </div>
 
@@ -165,32 +165,57 @@ davincilabs_GCS/
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
-| Electron + Vite 초기 설정 | ✅ | |
-| MAVLink UDP 수신/파싱 | ✅ | HEARTBEAT, ATTITUDE, POSITION, VFR_HUD, SYS_STATUS |
-| COMMAND_LONG 송신 | ✅ | ARM, DISARM, TAKEOFF, LAND, HOLD, RTL |
-| Zustand 텔레메트리 스토어 | ✅ | telemetry + history(300) |
-| Header (연결 UI) | ✅ | UDP/COM 탭, 연결 상태 표시 |
-| MapBackground | ✅ | Leaflet, ESRI 위성/CartoDB 다크 전환, 드론 마커 |
+| **코어 인프라** |  |  |
+| Electron + Vite 초기 설정 | ✅ | electron-vite, 자동 빌드 |
+| TypeScript 타입 체크 | ✅ | strict mode, 모든 파일 |
+| ESLint + Prettier 설정 | ✅ | 자동 포맷팅, pre-commit hooks |
+| **MAVLink 통신** |  |  |
+| UDP 소켓 연결 | ✅ | dgram 모듈, 자동 재연결 |
+| MAVLink v2 파싱 | ✅ | HEARTBEAT, ATTITUDE, GLOBAL_POSITION_INT, VFR_HUD, SYS_STATUS, PARAM_VALUE, COMMAND_ACK |
+| COMMAND_LONG 송신 | ✅ | ARM, DISARM, TAKEOFF, LAND, HOLD, RTL, SET_MODE |
+| 파라미터 요청 (PARAM_REQUEST_LIST) | ✅ | 목록 다운로드 진행률 표시 |
+| Checksum 계산 | ✅ | CRC-16/MCRF4XX with CRC_EXTRA |
+| **상태 관리** |  |  |
+| Zustand 텔레메트리 스토어 | ✅ | 300 point history, 30Hz throttle |
+| UI 상태 스토어 | ✅ | 패널 위치, 열림/닫힘 상태 |
+| 파라미터 캐시 스토어 | ✅ | 다운로드 진행률 |
+| **UI 컴포넌트** |  |  |
+| Header (연결 UI) | ✅ | CONNECT/DISCONNECT, 상태 표시 |
+| MapBackground | ✅ | Leaflet, ESRI 위성/CartoDB 다크, 드론 마커, 헤딩 표시 |
 | InstrumentsPanel | ✅ | Airspeed / Altitude / Heading / VSI (커스텀 SVG) |
-| AvionicsPanel | ✅ | ARM STATUS + MODE + HorizonIndicator + COMMANDS |
-| ChartPanel | ✅ | ATTITUDE/RATE/SPEED 3개 차트, 리사이즈 |
-| LogPanel | ✅ | INFO/WARN/ERR 레벨 컬러, 리사이즈 |
-| TelemetryPanel (STATUS) | ✅ | LAT/LON/ALT/GND SPD/AIR SPD/BAT |
-| 드론 아이콘 | ✅ | 흰색 VTOL + 주황 헤딩 라인 |
-| 패널 드래그 이동 | ✅ | useDraggable hook |
-| 패널 리사이즈 | ✅ | ChartPanel, LogPanel |
-| 패널 collapse 토글 | ✅ | 전 패널 |
+| AvionicsPanel | ✅ | 인공수평선 + ARM/DISARM/TAKEOFF/LAND/RTL/HOLD 버튼 |
+| ChartPanel | ✅ | Roll/Pitch/Yaw 3개 차트, 리사이즈, 축 토글 |
+| LogPanel | ✅ | INFO/WARN/ERROR 레벨, 컬러 코딩, 리사이즈 |
+| TelemetryPanel (STATUS) | ✅ | 위치, 고도, 속도, 배터리, 시스템 상태 |
+| 패널 드래그 이동 | ✅ | useDraggable hook, z-index 관리 |
+| 패널 리사이즈 | ✅ | 코너 핸들, 최소/최대 크기 제한 |
+| 패널 collapse 토글 | ✅ | 모든 패널 |
+| **문서** |  |  |
+| MAVLINK_PROTOCOL.md | ✅ | 7개 메시지, 7개 명령, 바이너리 구조 상세 |
+| USER_GUIDE.md | ✅ | 설치, 실행, 사용법, 8가지 문제 해결 |
+| DEVELOPER_GUIDE.md | ✅ | 개발 환경, 구조, 추가 방법, 테스트/디버깅 |
+| PROJECT_OVERVIEW.md | ✅ | 기존 |
+| TECH_STACK.md | ✅ | 기존 |
+| IPC_API.md | ✅ | 기존 |
+
+### 진행 중
+
+| 항목 | 담당 에이전트 | 예정 |
+|------|-------------|------|
+| CONNECT 버튼 동적 연결 (포트/호스트 변경) | Agent 2 | 2026-02-18 |
+| Parameter Builder (React Flow) 기초 | Agent 4 | 2026-02-18 |
+| QA: 린트, 타입체크, 테스트 | Agent 6 | 2026-02-18 |
 
 ### 미구현 (예정)
 
-| 항목 | 우선순위 |
-|------|---------|
-| CONNECT 버튼 실제 동작 (포트/호스트 변경) | 높음 |
-| COM/Serial 실제 통신 | 중간 |
-| 지도 비행 궤적 표시 | 중간 |
-| Parameter Builder (React Flow) | 낮음 |
-| 미션 플래닝 / 웨이포인트 업로드 | 낮음 |
-| 경보 시스템 (배터리/신호) | 낮음 |
+| 항목 | 우선순위 | 추정 난도 |
+|------|---------|---------|
+| COM/Serial 실제 통신 | 중간 | 중간 |
+| 지도 비행 궤적 표시 (Polyline) | 중간 | 낮음 |
+| Parameter Builder 완성 (PARAM_SET) | 높음 | 중간 |
+| 미션 플래닝 / 웨이포인트 업로드 | 중간 | 높음 |
+| 경보 시스템 (배터리/신호) | 낮음 | 낮음 |
+| macOS/Windows 패키징 | 낮음 | 낮음 |
 
 ## 👥 Team Agents
 
