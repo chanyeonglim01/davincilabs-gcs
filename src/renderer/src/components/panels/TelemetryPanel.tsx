@@ -58,12 +58,12 @@ function DataCell({ label, value, unit }: { label: string; value: string; unit: 
 export function TelemetryPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const { telemetry } = useTelemetryStore()
 
+  const lat = telemetry?.position?.lat?.toFixed(5) ?? '--'
+  const lon = telemetry?.position?.lon?.toFixed(5) ?? '--'
   const alt = telemetry?.position?.relative_alt?.toFixed(1) ?? '--'
-  const spd = telemetry?.velocity?.groundspeed?.toFixed(1) ?? '--'
-  const yaw = (((telemetry?.attitude?.yaw ?? 0) * 180) / Math.PI).toFixed(0)
+  const gspd = telemetry?.velocity?.groundspeed?.toFixed(1) ?? '--'
+  const aspd = telemetry?.velocity?.airspeed?.toFixed(1) ?? '--'
   const bat = telemetry?.status?.battery?.remaining?.toFixed(0) ?? '--'
-  const lat = telemetry?.position?.lat?.toFixed(4) ?? '--'
-  const lon = telemetry?.position?.lon?.toFixed(4) ?? '--'
 
   return (
     <div
@@ -119,7 +119,7 @@ export function TelemetryPanel({ onDragHandle, collapsed, onToggle }: Props) {
               letterSpacing: '0.12em'
             }}
           >
-            TELEMETRY
+            STATUS
           </span>
         </div>
         <span style={{ color: 'rgba(236, 223, 204, 0.3)', fontSize: '10px' }}>
@@ -134,12 +134,12 @@ export function TelemetryPanel({ onDragHandle, collapsed, onToggle }: Props) {
             gridTemplateColumns: '1fr 1fr'
           }}
         >
-          <DataCell label="ALT" value={alt} unit="m" />
-          <DataCell label="SPD" value={spd} unit="m/s" />
-          <DataCell label="YAW" value={yaw} unit="°" />
-          <DataCell label="BAT" value={bat} unit="%" />
           <DataCell label="LAT" value={lat} unit="°" />
           <DataCell label="LON" value={lon} unit="°" />
+          <DataCell label="ALT" value={alt} unit="m" />
+          <DataCell label="GND SPD" value={gspd} unit="m/s" />
+          <DataCell label="AIR SPD" value={aspd} unit="m/s" />
+          <DataCell label="BAT" value={bat} unit="%" />
         </div>
       )}
     </div>
