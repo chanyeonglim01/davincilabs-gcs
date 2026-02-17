@@ -35,10 +35,10 @@ function DraggablePanel({ initialX, initialY, children }: DraggablePanelProps) {
 // ─── MapOverlay ────────────────────────────────────────────────────────────────
 export function MapOverlay() {
   const [collapsed, setCollapsed] = useState({
-    instruments: false,
-    telemetry: false,
-    chart: false,
-    log: false
+    instruments: false,  // open: instruments always visible on startup
+    telemetry: true,     // collapsed: bottom bar
+    chart: true,         // collapsed: bottom bar
+    log: true            // collapsed: bottom bar
   })
 
   const toggle = (key: keyof typeof collapsed) =>
@@ -73,6 +73,7 @@ export function MapOverlay() {
       </div>
 
       {/* ── DRAGGABLE PANELS ─────────────────────────────────────────────────── */}
+      {/* Top-left: Instruments (open) */}
       <DraggablePanel initialX={20} initialY={68}>
         {(handle) => (
           <InstrumentsPanel
@@ -83,7 +84,8 @@ export function MapOverlay() {
         )}
       </DraggablePanel>
 
-      <DraggablePanel initialX={20} initialY={420}>
+      {/* Bottom row: STATUS | LOG | CHARTS — all collapsed on startup */}
+      <DraggablePanel initialX={20} initialY={730}>
         {(handle) => (
           <TelemetryPanel
             onDragHandle={handle}
@@ -93,22 +95,22 @@ export function MapOverlay() {
         )}
       </DraggablePanel>
 
-      <DraggablePanel initialX={280} initialY={580}>
-        {(handle) => (
-          <ChartPanel
-            onDragHandle={handle}
-            collapsed={collapsed.chart}
-            onToggle={() => toggle('chart')}
-          />
-        )}
-      </DraggablePanel>
-
-      <DraggablePanel initialX={20} initialY={580}>
+      <DraggablePanel initialX={250} initialY={730}>
         {(handle) => (
           <LogPanel
             onDragHandle={handle}
             collapsed={collapsed.log}
             onToggle={() => toggle('log')}
+          />
+        )}
+      </DraggablePanel>
+
+      <DraggablePanel initialX={644} initialY={730}>
+        {(handle) => (
+          <ChartPanel
+            onDragHandle={handle}
+            collapsed={collapsed.chart}
+            onToggle={() => toggle('chart')}
           />
         )}
       </DraggablePanel>

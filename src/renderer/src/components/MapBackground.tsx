@@ -6,21 +6,21 @@ import { useTelemetryStore } from '@renderer/store/telemetryStore'
 const createDroneIcon = (heading: number) =>
   L.divIcon({
     html: `
-      <div style="width:72px;height:72px;transform:rotate(${heading}deg);transform-origin:center;filter:drop-shadow(0 0 6px rgba(236,223,204,0.6));">
+      <div style="width:72px;height:72px;transform:rotate(${heading}deg);transform-origin:center;filter:drop-shadow(0 0 8px rgba(0,212,255,0.9));">
         <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- Fuselage -->
-          <ellipse cx="36" cy="36" rx="4" ry="17" fill="#ECDFCC"/>
+          <ellipse cx="36" cy="36" rx="4" ry="17" fill="#00D4FF"/>
           <!-- Main swept wings -->
-          <path d="M36 30 L4 42 L5 46 L36 37 L67 46 L68 42 Z" fill="#ECDFCC" fill-opacity="0.9"/>
+          <path d="M36 30 L4 42 L5 46 L36 37 L67 46 L68 42 Z" fill="#00D4FF" fill-opacity="0.9"/>
           <!-- Canard (front wings) -->
-          <path d="M36 20 L22 25 L22 28 L36 23 L50 28 L50 25 Z" fill="#ECDFCC" fill-opacity="0.7"/>
+          <path d="M36 20 L22 25 L22 28 L36 23 L50 28 L50 25 Z" fill="#00D4FF" fill-opacity="0.7"/>
           <!-- Tail fin -->
-          <path d="M36 50 L27 62 L29 63 L36 53 L43 63 L45 62 Z" fill="#ECDFCC" fill-opacity="0.65"/>
+          <path d="M36 50 L27 62 L29 63 L36 53 L43 63 L45 62 Z" fill="#00D4FF" fill-opacity="0.65"/>
           <!-- Nose tip -->
-          <circle cx="36" cy="18" r="3" fill="#ECDFCC"/>
+          <circle cx="36" cy="18" r="3" fill="#00D4FF"/>
           <!-- Engine center ring -->
-          <circle cx="36" cy="36" r="6" fill="#181C14" stroke="#ECDFCC" stroke-width="1.5" stroke-opacity="0.8"/>
-          <circle cx="36" cy="36" r="2.5" fill="#ECDFCC"/>
+          <circle cx="36" cy="36" r="6" fill="#0a1a2a" stroke="#00D4FF" stroke-width="1.5"/>
+          <circle cx="36" cy="36" r="2.5" fill="#00D4FF"/>
         </svg>
       </div>
     `,
