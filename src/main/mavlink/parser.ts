@@ -18,6 +18,7 @@ export interface MavlinkParserEvents {
   telemetry: (data: TelemetryData) => void
   homePosition: (home: HomePosition) => void
   paramValue: (param: ParamEntry) => void
+  paramCount: (count: number) => void
   commandAck: (result: CommandResult) => void
   heartbeat: () => void
   missionRequest: (seq: number) => void
@@ -159,13 +160,18 @@ export class MavlinkParser extends EventEmitter {
   private handleHeartbeat(packet: Buffer): void {
     const base_mode = packet.readUInt8(16)
     const system_status = packet.readUInt8(19)
+    const custom_mode = packet.readUInt32LE(10)
+    const main_mode = (custom_mode >> 16) & 0xff
+    const sub_mode = (custom_mode >> 24) & 0xff
 
     const armed = (base_mode & MAV_MODE_FLAG.SAFETY_ARMED) !== 0
     const statusStr = this.getSystemStatusString(system_status)
+    const flightMode = this.getPx4FlightMode(main_mode, sub_mode)
 
     if (this.telemetryState.status) {
       this.telemetryState.status.armed = armed
       this.telemetryState.status.systemStatus = statusStr
+      this.telemetryState.status.flightMode = flightMode
     }
 
     this.emit('heartbeat')
@@ -277,7 +283,7 @@ export class MavlinkParser extends EventEmitter {
    */
   private handleParamValue(packet: Buffer): void {
     const param_value = packet.readFloatLE(10)
-    // const param_count = packet.readUInt16LE(14) // Used for progress tracking (TODO)
+    const param_count = packet.readUInt16LE(14)
     const param_index = packet.readUInt16LE(16)
     const param_type = packet.readUInt8(18)
     const param_id = packet.subarray(19, 35).toString('ascii').replace(/\0/g, '')
@@ -289,6 +295,9 @@ export class MavlinkParser extends EventEmitter {
       index: param_index
     }
 
+    if (param_count > 0) {
+      this.emit('paramCount', param_count)
+    }
     this.emit('paramValue', param)
   }
 
@@ -345,6 +354,38 @@ export class MavlinkParser extends EventEmitter {
       [MAV_STATE.FLIGHT_TERMINATION]: 'FLIGHT_TERMINATION'
     }
     return statusMap[status] || 'UNKNOWN'
+  }
+
+  /**
+   * Convert PX4 custom_mode main/sub to flight mode string
+   */
+  private getPx4FlightMode(mainMode: number, subMode: number): string {
+    switch (mainMode) {
+      case 1:
+        return 'MANUAL'
+      case 2:
+        return 'ALTCTL'
+      case 3:
+        return 'POSCTL'
+      case 4: {
+        const autoSubMap: Record<number, string> = {
+          2: 'AUTO.TAKEOFF',
+          3: 'AUTO.LOITER',
+          4: 'AUTO.MISSION',
+          5: 'AUTO.RTL',
+          6: 'AUTO.LAND'
+        }
+        return autoSubMap[subMode] || 'AUTO'
+      }
+      case 5:
+        return 'ACRO'
+      case 6:
+        return 'OFFBOARD'
+      case 7:
+        return 'STABILIZED'
+      default:
+        return 'UNKNOWN'
+    }
   }
 
   /**

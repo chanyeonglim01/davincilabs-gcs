@@ -136,11 +136,23 @@ export function commandToBuffer(command: Command): Buffer {
       return createCommandLong(193, 1, 0, 0, 0, 0, 0, 0)
 
     case 'SET_MODE': {
-      const mode = command.params?.mode || 'AUTO'
-      // SET_MODE is complex - for now, just log
-      console.warn(`[Commander] SET_MODE not yet implemented for mode: ${mode}`)
-      // Placeholder: MAV_CMD_DO_SET_MODE
-      return createCommandLong(MAV_CMD.DO_SET_MODE, 1, 0, 0, 0, 0, 0, 0)
+      const mode = command.params?.mode || 'AUTO.MISSION'
+      const PX4_MODE_MAP: Record<string, number> = {
+        'MANUAL': 1 << 16,
+        'ALTCTL': 2 << 16,
+        'POSCTL': 3 << 16,
+        'AUTO.TAKEOFF': (4 << 16) | (2 << 24),
+        'AUTO.LOITER': (4 << 16) | (3 << 24),
+        'AUTO.MISSION': (4 << 16) | (4 << 24),
+        'AUTO.RTL': (4 << 16) | (5 << 24),
+        'AUTO.LAND': (4 << 16) | (6 << 24),
+        'ACRO': 5 << 16,
+        'OFFBOARD': 6 << 16,
+        'STABILIZED': 7 << 16
+      }
+      const customMode = PX4_MODE_MAP[mode] ?? PX4_MODE_MAP['AUTO.MISSION']
+      // param1=1 (MAV_MODE_FLAG_CUSTOM_MODE_ENABLED), param2=custom_mode as float
+      return createCommandLong(MAV_CMD.DO_SET_MODE, 1, customMode, 0, 0, 0, 0, 0)
     }
 
     default:

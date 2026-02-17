@@ -13,9 +13,14 @@ import { getMavlinkConnection } from './mavlink/connection'
 import { getMavlinkParser } from './mavlink/parser'
 
 // IPC handlers
-import { registerTelemetryHandlers, sendTelemetryUpdate, sendHomePosition } from './ipc/telemetry'
+import {
+  registerTelemetryHandlers,
+  sendTelemetryUpdate,
+  sendHomePosition,
+  sendLogMessage
+} from './ipc/telemetry'
 import { registerCommandHandlers } from './ipc/commands'
-import { registerParameterHandlers, sendParamValue } from './ipc/parameters'
+import { registerParameterHandlers, sendParamValue, sendParamProgress } from './ipc/parameters'
 
 // Store
 import { getConnectionConfig, getWindowBounds, setWindowBounds } from './store'
@@ -75,6 +80,9 @@ function initializeMavlink(): void {
   const connection = getMavlinkConnection()
   const parser = getMavlinkParser()
 
+  let paramTotalCount = 0
+  let paramReceivedCount = 0
+
   // Wire up parser events to IPC
   parser.on('telemetry', (data) => {
     sendTelemetryUpdate(data)
@@ -84,9 +92,16 @@ function initializeMavlink(): void {
     sendHomePosition(home)
   })
 
+  parser.on('paramCount', (count) => {
+    paramTotalCount = count
+  })
+
   parser.on('paramValue', (param) => {
     sendParamValue(param)
-    // TODO: Track param count for progress
+    paramReceivedCount++
+    if (paramTotalCount > 0) {
+      sendParamProgress(paramReceivedCount, paramTotalCount)
+    }
   })
 
   parser.on('commandAck', (result) => {
@@ -124,6 +139,7 @@ function initializeMavlink(): void {
 
   connection.on('error', (err) => {
     console.error('[Main] MAVLink connection error:', err)
+    sendLogMessage('error', `MAVLink error: ${err.message}`)
   })
 
   // Auto-connect in Simulink mode
