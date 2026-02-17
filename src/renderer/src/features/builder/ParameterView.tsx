@@ -137,10 +137,10 @@ const nodeTypes = { param: ParamNodeComponent }
 //
 //  [AIRFRAME] ──► [XY POS P] ──► [XY VEL PID] ──► (thrust vec)
 //             ──► [Z  POS P] ──► [Z  VEL PID] ──► (throttle)
-//             ──► [ATT   P ] ──► [RATE ROLL  ] ──► (mixer)
-//                              ──► [RATE PITCH]
-//                              ──► [RATE YAW  ]
-//  [BATTERY]  ──────────────────────────────────► [LIMITS]
+//             ──► [ATT P ROLL ] ──► [RATE ROLL ] ──► (mixer)
+//             ──► [ATT P PITCH] ──► [RATE PITCH]
+//             ──► [ATT P YAW  ] ──► [RATE YAW  ]
+//  [BATTERY]  ──────────────────────────────────────► [LIMITS]
 //
 
 const INITIAL_NODES: ParamNode[] = [
@@ -148,7 +148,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'airframe',
     type: 'param',
-    position: { x: 60, y: 180 },
+    position: { x: 60, y: 240 },
     data: {
       category: 'airframe',
       title: 'AIRFRAME',
@@ -166,7 +166,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'battery',
     type: 'param',
-    position: { x: 60, y: 450 },
+    position: { x: 60, y: 540 },
     data: {
       category: 'battery',
       title: 'BATTERY',
@@ -185,7 +185,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'xy-pos',
     type: 'param',
-    position: { x: 340, y: 60 },
+    position: { x: 320, y: 60 },
     data: {
       category: 'pos',
       title: 'XY POS CTRL',
@@ -200,7 +200,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'z-pos',
     type: 'param',
-    position: { x: 340, y: 260 },
+    position: { x: 320, y: 290 },
     data: {
       category: 'pos',
       title: 'Z POS CTRL',
@@ -213,29 +213,12 @@ const INITIAL_NODES: ParamNode[] = [
       ]
     }
   },
-  {
-    id: 'att-ctrl',
-    type: 'param',
-    position: { x: 340, y: 510 },
-    data: {
-      category: 'att',
-      title: 'ATT CTRL',
-      subtitle: 'Attitude P loop (outer)',
-      accentColor: COLORS.att,
-      fields: [
-        { key: 'MC_ROLL_P',  label: 'ROLL P',  value: 6.5, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MC_ROLL_P' },
-        { key: 'MC_PITCH_P', label: 'PITCH P', value: 6.5, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MC_PITCH_P' },
-        { key: 'MC_YAW_P',   label: 'YAW P',   value: 2.8, type: 'number', step: 0.1, min: 0, max: 10, mavId: 'MC_YAW_P' },
-        { key: 'MC_YAW_WEIGHT', label: 'YAW W', value: 0.4, type: 'number', step: 0.05, min: 0, max: 1, mavId: 'MC_YAW_WEIGHT' },
-      ]
-    }
-  },
 
   // ── VELOCITY LOOP (PID) ──────────────────────────────────────────────────────
   {
     id: 'xy-vel',
     type: 'param',
-    position: { x: 620, y: 60 },
+    position: { x: 580, y: 60 },
     data: {
       category: 'vel',
       title: 'XY VEL CTRL',
@@ -252,7 +235,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'z-vel',
     type: 'param',
-    position: { x: 620, y: 340 },
+    position: { x: 580, y: 290 },
     data: {
       category: 'vel',
       title: 'Z VEL CTRL',
@@ -267,11 +250,56 @@ const INITIAL_NODES: ParamNode[] = [
     }
   },
 
+  // ── ATTITUDE LOOP (P only, per axis) ─────────────────────────────────────────
+  {
+    id: 'att-roll',
+    type: 'param',
+    position: { x: 840, y: 60 },
+    data: {
+      category: 'att',
+      title: 'ATT P ROLL',
+      subtitle: 'Roll attitude P (outer)',
+      accentColor: COLORS.att,
+      fields: [
+        { key: 'MC_ROLL_P', label: 'P', value: 6.5, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MC_ROLL_P' },
+      ]
+    }
+  },
+  {
+    id: 'att-pitch',
+    type: 'param',
+    position: { x: 840, y: 280 },
+    data: {
+      category: 'att',
+      title: 'ATT P PITCH',
+      subtitle: 'Pitch attitude P (outer)',
+      accentColor: COLORS.att,
+      fields: [
+        { key: 'MC_PITCH_P', label: 'P', value: 6.5, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MC_PITCH_P' },
+      ]
+    }
+  },
+  {
+    id: 'att-yaw',
+    type: 'param',
+    position: { x: 840, y: 500 },
+    data: {
+      category: 'att',
+      title: 'ATT P YAW',
+      subtitle: 'Yaw attitude P (outer)',
+      accentColor: COLORS.att,
+      fields: [
+        { key: 'MC_YAW_P',      label: 'P',     value: 2.8, type: 'number', step: 0.1,  min: 0, max: 10, mavId: 'MC_YAW_P' },
+        { key: 'MC_YAW_WEIGHT', label: 'YAW W', value: 0.4, type: 'number', step: 0.05, min: 0, max: 1,  mavId: 'MC_YAW_WEIGHT' },
+      ]
+    }
+  },
+
   // ── RATE LOOP (PID) ──────────────────────────────────────────────────────────
   {
     id: 'rate-roll',
     type: 'param',
-    position: { x: 900, y: 60 },
+    position: { x: 1100, y: 60 },
     data: {
       category: 'rate',
       title: 'RATE ROLL',
@@ -288,7 +316,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'rate-pitch',
     type: 'param',
-    position: { x: 900, y: 290 },
+    position: { x: 1100, y: 280 },
     data: {
       category: 'rate',
       title: 'RATE PITCH',
@@ -305,7 +333,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'rate-yaw',
     type: 'param',
-    position: { x: 900, y: 520 },
+    position: { x: 1100, y: 500 },
     data: {
       category: 'rate',
       title: 'RATE YAW',
@@ -324,7 +352,7 @@ const INITIAL_NODES: ParamNode[] = [
   {
     id: 'limits',
     type: 'param',
-    position: { x: 1130, y: 300 },
+    position: { x: 1370, y: 290 },
     data: {
       category: 'limits',
       title: 'LIMITS',
@@ -347,17 +375,20 @@ const EDGE_STYLE_ATT = { stroke: COLORS.att + 'AA', strokeWidth: 1.5 }
 const EDGE_STYLE_BAT = { stroke: COLORS.battery + '66', strokeWidth: 1.5 }
 
 const INITIAL_EDGES: Edge[] = [
-  // Airframe → position/attitude
+  // Airframe → position
   { id: 'af-xypos', source: 'airframe', target: 'xy-pos', style: EDGE_STYLE_AF },
   { id: 'af-zpos',  source: 'airframe', target: 'z-pos',  style: EDGE_STYLE_AF },
-  { id: 'af-att',   source: 'airframe', target: 'att-ctrl', style: EDGE_STYLE_AF },
+  // Airframe → attitude (per axis)
+  { id: 'af-att-roll',  source: 'airframe', target: 'att-roll',  style: EDGE_STYLE_AF },
+  { id: 'af-att-pitch', source: 'airframe', target: 'att-pitch', style: EDGE_STYLE_AF },
+  { id: 'af-att-yaw',   source: 'airframe', target: 'att-yaw',   style: EDGE_STYLE_AF },
   // Position → velocity
   { id: 'xypos-xyvel', source: 'xy-pos', target: 'xy-vel', style: EDGE_STYLE_POS },
   { id: 'zpos-zvel',   source: 'z-pos',  target: 'z-vel',  style: EDGE_STYLE_POS },
-  // Attitude → rate
-  { id: 'att-roll',  source: 'att-ctrl', target: 'rate-roll',  style: EDGE_STYLE_ATT },
-  { id: 'att-pitch', source: 'att-ctrl', target: 'rate-pitch', style: EDGE_STYLE_ATT },
-  { id: 'att-yaw',   source: 'att-ctrl', target: 'rate-yaw',   style: EDGE_STYLE_ATT },
+  // Attitude P → Rate PID (per axis)
+  { id: 'att-roll-rate',  source: 'att-roll',  target: 'rate-roll',  style: EDGE_STYLE_ATT },
+  { id: 'att-pitch-rate', source: 'att-pitch', target: 'rate-pitch', style: EDGE_STYLE_ATT },
+  { id: 'att-yaw-rate',   source: 'att-yaw',   target: 'rate-yaw',   style: EDGE_STYLE_ATT },
   // Battery → limits
   { id: 'bat-limits', source: 'battery', target: 'limits', style: EDGE_STYLE_BAT },
   // Rate → limits
