@@ -18,6 +18,11 @@
 2. `PROGRESS.md` — 현재 어디까지 왔는지
 3. `memory/gcs_status.md` — 버그 상세 및 다음 작업 명세
 
+> **주의**: `README.md`와 `.claude/CLAUDE.md`는 **수정하지 않는다.**
+> - `README.md` — 프로젝트 기능/구조가 크게 바뀌지 않는 한 변경 없음
+> - `.claude/CLAUDE.md` — 코딩 규칙은 고정. 규칙 변경이 필요하면 사용자에게 먼저 확인
+> - 진행 상황 업데이트는 이 파일(`PROGRESS.md`)에만 기록
+
 ---
 
 ## 목표
