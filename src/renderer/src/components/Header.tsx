@@ -209,7 +209,7 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
             whiteSpace: 'nowrap'
           }}
         >
-          ADVANCED AIR MOBILITY GCS
+          ADVANCED AIR MOBILITY GROUND CONTROL SYSTEM
         </div>
       </div>
 
