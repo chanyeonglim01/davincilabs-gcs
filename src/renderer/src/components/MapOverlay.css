@@ -1,0 +1,76 @@
+.map-overlay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panels-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.panels-container > div {
+  position: absolute;
+  pointer-events: auto;
+}
+
+/* Panel Positions */
+.panel-top-left {
+  top: 80px;
+  left: 24px;
+  max-width: 400px;
+}
+
+.panel-top-right {
+  top: 80px;
+  right: 24px;
+  width: 280px;
+}
+
+.panel-middle-right {
+  top: 380px;
+  right: 24px;
+  width: 280px;
+}
+
+.panel-bottom-right {
+  bottom: 24px;
+  right: 24px;
+  width: 280px;
+}
+
+.panel-bottom-center {
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 600px;
+  width: 90%;
+}
+
+.panel-bottom-left {
+  bottom: 24px;
+  left: 24px;
+  width: 320px;
+  max-height: 200px;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .panel-top-left,
+  .panel-top-right,
+  .panel-middle-right,
+  .panel-bottom-right,
+  .panel-bottom-left {
+    width: 240px;
+  }
+
+  .panel-bottom-center {
+    max-width: 500px;
+  }
+}

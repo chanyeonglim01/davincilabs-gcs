@@ -1,0 +1,62 @@
+@import './base.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Vercel-style Dark Base */
+    --background: 220 13% 8%;        /* #13151A */
+    --surface: 220 13% 11%;          /* #1A1C22 */
+    --surface-elevated: 220 13% 14%; /* #212329 */
+
+    /* Text Colors */
+    --foreground: 0 0% 98%;          /* #FAFAFA */
+    --text-secondary: 220 9% 65%;    /* #9CA3AF */
+    --text-tertiary: 220 9% 46%;     /* #6B7280 */
+
+    /* UAM Neon Accents */
+    --primary: 200 100% 50%;         /* #00BFFF - Electric Blue */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 160 100% 40%;       /* #00CC7A - Neon Green */
+    --secondary-foreground: 0 0% 98%;
+    --warning: 45 100% 50%;          /* #FFB800 - Amber */
+    --warning-foreground: 220 13% 8%;
+    --danger: 0 84% 60%;             /* #F43F5E - Red */
+    --danger-foreground: 0 0% 98%;
+
+    /* Component Colors */
+    --card: 220 13% 11%;             /* #1A1C22 */
+    --card-foreground: 0 0% 98%;
+    --popover: 220 13% 11%;
+    --popover-foreground: 0 0% 98%;
+    --muted: 220 13% 14%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 220 13% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Borders & Inputs */
+    --border: 220 13% 20%;           /* #2D3038 */
+    --border-hover: 220 13% 30%;     /* #42454D */
+    --input: 220 13% 14%;
+    --ring: 200 100% 50%;            /* Electric Blue */
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground overflow-hidden;
+  }
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+}
