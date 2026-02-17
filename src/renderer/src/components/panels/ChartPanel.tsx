@@ -157,6 +157,7 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
       {/* Drag Handle */}
       <div
         onMouseDown={onDragHandle}
+        onClick={onToggle}
         style={{
           display: 'flex',
           alignItems: 'center',

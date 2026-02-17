@@ -139,7 +139,7 @@ export function MapBackground() {
               transition: 'all 0.15s ease'
             }}
           >
-            {mode === 'satellite' ? 'SAT' : 'DARK'}
+            {mode === 'satellite' ? 'SAT' : 'MAPS'}
           </button>
         ))}
       </div>
