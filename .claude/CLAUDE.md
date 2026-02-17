@@ -307,24 +307,30 @@ Ctrl+C (종료) → pnpm dev
 
 ## 개발 로드맵 및 테스트 전략
 
-### 작업 우선순위
+### 완료된 작업 (2026-02-17)
 
-1. **CONNECT 버튼 실제 동작** (높음)
-   - Header의 UDP host/port 입력값으로 실제 소켓 재연결
-   - `window.mavlink.connect({ host, port })` IPC 구현
+- ✅ CONNECT 버튼 동작 — Header에서 host/port/remotePort 변경 후 `window.mavlink.reconnect()` 호출
+- ✅ 미션 업로드 — Mission 뷰, MAVLink CLEAR→COUNT→ITEM_INT→ACK 상태머신
+- ✅ Parameter 뷰 — React Flow 노드 그래프 (PX4 제어 구조 6열)
+- ✅ PARAM_REQUEST_LIST / PARAM_SET IPC
 
-2. **웨이포인트 업로드** (높음)
-   - 지도 클릭 → 웨이포인트 추가/삭제
-   - MAVLink Mission Protocol: MISSION_COUNT → MISSION_ITEM_INT → MISSION_ACK
-   - Simulink S-Function에 이미 미션 수신 로직 있음 (`mavlinkGCS_sfunc.m`)
+### 남은 작업 우선순위
 
-3. **파라미터 빌더** (중간)
-   - PARAM_REQUEST_LIST / PARAM_VALUE 수신
-   - React Flow 노드 에디터 (`src/renderer/src/features/builder/`)
-   - PID 게인 등 파라미터 시각화 + PARAM_SET 송신
+1. **HEARTBEAT custom_mode → flightMode 이름 변환** (높음)
+   - `parser.ts handleHeartbeat`에서 `custom_mode` (offset 10, UInt32LE) 파싱
+   - PX4: `main_mode = (custom_mode>>16)&0xFF`, AUTO sub_mode = `(custom_mode>>24)&0xFF`
 
-4. **비행 궤적 표시** (낮음)
-   - 지도에 GPS 트랙 폴리라인
+2. **SET_MODE 명령 구현** (높음)
+   - `commander.ts` SET_MODE case: 모드 이름 → PX4 custom_mode 매핑 후 COMMAND_LONG(176) 전송
+
+3. **PARAM_VALUE param_count 활성화** (중간)
+   - `parser.ts handleParamValue` TODO 주석 해제 → `sendParamProgress()` 호출
+
+4. **Connection Error → UI 전달** (중간)
+   - `index.ts connection.on('error')` → `sendLogMessage('error', ...)` 추가
+
+5. **PX4 SITL 통합 테스트** (높음)
+   - GCS remotePort=14580으로 설정 → `make px4_sitl jmavsim`
 
 ### 테스트 전략: SITL → Simulink 순서
 
@@ -332,65 +338,46 @@ Ctrl+C (종료) → pnpm dev
 ```bash
 # px4/ 폴더에서
 make px4_sitl jmavsim
-# UDP 14550 MAVLink 송출 → GCS 14551 수신
+# SITL → GCS: UDP 14550 / GCS → SITL: UDP 14580
+# GCS Header에서 remotePort=14580 설정 후 CONNECT
 ```
-- MAVLink 표준 완벽 준수 → 미션 프로토콜, 파라미터 모두 즉시 테스트 가능
-- QGC와 병행 비교로 디버깅 용이
 
 **Phase 2: Simulink 최종 연동**
-- SITL에서 완성된 GCS → 포트/SysID만 맞춰 Simulink 연결
-- UAM 모델 특화 동작 검증
+- SITL에서 완성된 GCS → remotePort=14551로 변경 → Simulink 연결
 
 ---
 
-## UI 구현 현황 (2026-02-17)
+## UI 구현 현황 (2026-02-18)
 
-> Agent 3 (Dashboard Frontend) 작업 완료 항목
+### 완료된 뷰 & 컴포넌트
 
-### 완료된 컴포넌트
+**뷰 구조** (Header 탭으로 전환)
+- **Main 뷰** (`MapOverlay.tsx`): 전체화면 Leaflet 지도 + 드래그 가능 패널 오버레이
+- **Mission 뷰** (`MissionView.tsx`): 웨이포인트 추가/삭제/드래그 + 고도 프로파일 + 업로드 버튼
+- **Parameter 뷰** (`features/builder/ParameterView.tsx`): React Flow 6열 노드 그래프
 
-**레이아웃 구조** (`MapOverlay.tsx`)
-- 전체 화면 Leaflet 지도 위 오버레이 패널 구조
-- 초기 배치: Instruments(좌상단 open) → Charts(좌 open) → Log(좌하단 open) / Avionics+Status(우측 고정 flex column)
-- 패널 간 간격 8px 통일
-- z-index: 지도 내부 200~1000, 패널 1100, 헤더 1200, 타일 토글 1050
+**Main 뷰 패널**
+- MapBackground: Leaflet, ESRI SAT / CartoDB Dark 전환, 드론 VTOL SVG 마커 + 헤딩
+- InstrumentsPanel (643px): AirspeedIndicator / AltimeterIndicator / HeadingDial / VsiIndicator (커스텀 SVG)
+- AvionicsPanel (220px): 인공수평선 + ARM/DISARM/TAKEOFF/LAND/HOLD/RTL 버튼 (확인 다이얼로그)
+- ChartPanel (드래그+리사이즈): Roll/Pitch/Yaw Recharts, collapse, 시리즈 토글
+- LogPanel (드래그+리사이즈): INFO/WARN/ERR 색상, `addLog()` 전역 함수
+- TelemetryPanel (STATUS, 220px): AvionicsPanel과 flex column으로 묶음
 
-**지도** (`MapBackground.tsx`)
-- Leaflet, ESRI World Imagery(SAT) / CartoDB Dark(MAPS) 전환
-- 드론 마커: 흰색 VTOL SVG (96×112px) + 주황 헤딩 직선
-- heading 회전: CSS `transform: rotate(${heading}deg)`
-- CSP `img-src`에 타일 서버 도메인 추가 필수 (`index.html`)
-- Main Process에 `onHeadersReceived` CORS bypass 적용 (`src/main/index.ts`)
-
-**계기판** (`InstrumentsPanel.tsx`, 643px 고정)
-- AirspeedIndicator, AltimeterIndicator, HeadingDial, VsiIndicator — 모두 커스텀 SVG
-- 각 SVG 크기 140px, 모노 + 다크 계기반 디자인
-
-**AvionicsPanel** (`AvionicsPanel.tsx`, 220px 고정)
-- HorizonIndicator: SVG 인공 수평선 (`HorizonIndicator.tsx`)
-- COMMANDS: ARM/DISARM/TAKEOFF/LAND/HOLD/RTL → 확인 다이얼로그 → `window.mavlink.sendCommand()`
-
-**ChartPanel** (`ChartPanel.tsx`)
-- 초기 크기 320×260px, 우하단 리사이즈 핸들
-- 3개 차트 각각 독립 collapse, 시리즈 토글 버튼
-- `history.slice(-60)` → rad→deg 변환 후 Recharts LineChart
-
-**LogPanel** (`LogPanel.tsx`)
-- 초기 크기 320×200px, 전역 `addLog(level, msg)` 사용
-- INFO/WARN/ERR 레벨 별 색상 + 행 배경
-
-**TelemetryPanel** (`TelemetryPanel.tsx`, STATUS)
-- 220px 고정 너비, AvionicsPanel과 flex column으로 묶어 자동 배치
+**Parameter 뷰 노드 레이아웃** (6열, 좌→우 = upstream→downstream)
+```
+AIRFRAME/BATTERY → XY/Z POS(P) → XY/Z VEL(PID) → ATT P ROLL/PITCH/YAW → RATE ROLL/PITCH/YAW(PID) → LIMITS
+```
 
 ### 알려진 주의사항
 
-- `davincilabs_GCS/` 는 별도 git repo (`chanyeonglim01/davincilabs-gcs`) → 커밋은 해당 폴더 내부에서
-- Leaflet 타일 표시 안 될 때: `index.html` CSP `img-src` 확인
-- 지도 사이즈 깨질 때: `map.invalidateSize()` 호출 필요
-- 패널이 지도 아래로 묻힐 때: z-index 1100 이상 필요 (Leaflet controls는 1000)
-- STATUS 패널 AvionicsPanel과 겹칠 때: 두 패널을 `flex column` 컨테이너로 묶어 해결
+- `davincilabs_GCS/` 는 별도 git repo (`chanyeonglim01/davincilabs-gcs`) → 커밋은 이 폴더 안에서
+- Leaflet 타일 안 보일 때: `index.html` CSP `img-src` 확인
+- 지도 사이즈 깨질 때: `map.invalidateSize()` 호출
+- 패널 지도 아래 묻힐 때: z-index 1100 이상 (Leaflet controls = 1000)
+- flightMode가 'UNKNOWN'으로 표시: HEARTBEAT custom_mode 파싱 미구현 (다음 작업)
 
 ---
 
-**버전**: v1.1.0
-**최종 업데이트**: 2026-02-17
+**버전**: v1.2.0
+**최종 업데이트**: 2026-02-18
