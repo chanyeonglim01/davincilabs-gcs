@@ -96,6 +96,13 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const toggle = (key: string) => setVisible((v) => ({ ...v, [key]: !v[key] }))
   const toggleChart = (id: string) => setChartCollapsed((v) => ({ ...v, [id]: !v[id] }))
 
+  const SUBHEADER_HEIGHT = 32 // px per chart section header
+  const openCount = CHARTS.filter((c) => !chartCollapsed[c.id]).length
+  const totalHeadersHeight = CHARTS.length * SUBHEADER_HEIGHT
+  const perChartHeight = openCount > 0
+    ? Math.max(60, Math.floor((size.height - totalHeadersHeight) / openCount))
+    : 0
+
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!resizing.current) return
@@ -184,15 +191,7 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
       {!collapsed && (
         <>
-          <div
-            style={{
-              height: `${size.height}px`,
-              overflowY: 'auto',
-              padding: '4px 0',
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'rgba(236, 223, 204, 0.15) transparent'
-            }}
-          >
+          <div style={{ padding: '4px 0' }}>
             {CHARTS.map((chart, ci) => (
               <div
                 key={chart.id}
@@ -237,7 +236,7 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
                 {/* Chart body */}
                 {!chartCollapsed[chart.id] && (
                   <div style={{ padding: '0 0 6px' }}>
-                    <ResponsiveContainer width="100%" height={90}>
+                    <ResponsiveContainer width="100%" height={perChartHeight}>
                       <LineChart data={chartData} margin={{ top: 2, right: 8, left: -24, bottom: 0 }}>
                         <XAxis dataKey="t" hide />
                         <YAxis
