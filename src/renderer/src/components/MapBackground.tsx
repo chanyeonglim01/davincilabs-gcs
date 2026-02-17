@@ -29,14 +29,15 @@ const createDroneIcon = (heading: number) =>
     className: ''
   })
 
-const TILES: Record<string, { url: string; maxZoom: number; tms?: boolean }> = {
+const TILES: Record<string, { url: string; maxZoom: number; subdomains?: string }> = {
   satellite: {
-    url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-    maxZoom: 20
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 19
   },
   dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    maxZoom: 19
+    maxZoom: 19,
+    subdomains: 'abcd'
   }
 }
 
@@ -62,10 +63,11 @@ export function MapBackground() {
     })
 
     const tileLayer = L.tileLayer(TILES.satellite.url, {
-      maxZoom: TILES.satellite.maxZoom,
-      subdomains: ['0', '1', '2', '3'],
-      crossOrigin: true
+      maxZoom: TILES.satellite.maxZoom
     }).addTo(map)
+
+    // Force Leaflet to recalculate container size
+    setTimeout(() => map.invalidateSize(), 100)
     const marker = L.marker([37.5665, 126.978], { icon: createDroneIcon(0) }).addTo(map)
 
     mapInstanceRef.current = map
@@ -82,10 +84,12 @@ export function MapBackground() {
 
   // Switch tile layer
   useEffect(() => {
-    if (!tileLayerRef.current) return
-    const { url, maxZoom } = TILES[tileMode]
+    if (!tileLayerRef.current || !mapInstanceRef.current) return
+    const { url, maxZoom, subdomains } = TILES[tileMode]
     tileLayerRef.current.setUrl(url)
     tileLayerRef.current.options.maxZoom = maxZoom
+    if (subdomains) tileLayerRef.current.options.subdomains = subdomains
+    mapInstanceRef.current.invalidateSize()
   }, [tileMode])
 
   // Update marker position + heading rotation
