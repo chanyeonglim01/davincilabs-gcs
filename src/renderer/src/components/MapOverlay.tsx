@@ -54,11 +54,15 @@ export function MapOverlay() {
         background: '#181C14'
       }}
     >
-      {/* Full-screen map */}
-      <MapBackground />
+      {/* Full-screen map — lowest layer */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+        <MapBackground />
+      </div>
 
       {/* Fixed header */}
-      <Header />
+      <div style={{ position: 'relative', zIndex: 30 }}>
+        <Header />
+      </div>
 
       {/* ── FIXED PANELS ─────────────────────────────────────────────────────── */}
       {/* Top-right: Avionics display */}

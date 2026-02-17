@@ -110,7 +110,7 @@ export function MapBackground() {
           position: 'absolute',
           bottom: '20px',
           right: '20px',
-          zIndex: 1000,
+          zIndex: 10,
           display: 'flex',
           gap: '4px'
         }}
