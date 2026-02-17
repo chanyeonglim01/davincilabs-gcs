@@ -29,9 +29,15 @@ const createDroneIcon = (heading: number) =>
     className: ''
   })
 
-const TILES = {
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const TILES: Record<string, { url: string; maxZoom: number; tms?: boolean }> = {
+  satellite: {
+    url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    maxZoom: 20
+  },
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    maxZoom: 19
+  }
 }
 
 type TileMode = 'dark' | 'satellite'
@@ -55,7 +61,11 @@ export function MapBackground() {
       attributionControl: false
     })
 
-    const tileLayer = L.tileLayer(TILES.satellite, { maxZoom: 19 }).addTo(map)
+    const tileLayer = L.tileLayer(TILES.satellite.url, {
+      maxZoom: TILES.satellite.maxZoom,
+      subdomains: ['0', '1', '2', '3'],
+      crossOrigin: true
+    }).addTo(map)
     const marker = L.marker([37.5665, 126.978], { icon: createDroneIcon(0) }).addTo(map)
 
     mapInstanceRef.current = map
@@ -73,7 +83,9 @@ export function MapBackground() {
   // Switch tile layer
   useEffect(() => {
     if (!tileLayerRef.current) return
-    tileLayerRef.current.setUrl(TILES[tileMode])
+    const { url, maxZoom } = TILES[tileMode]
+    tileLayerRef.current.setUrl(url)
+    tileLayerRef.current.options.maxZoom = maxZoom
   }, [tileMode])
 
   // Update marker position + heading rotation
