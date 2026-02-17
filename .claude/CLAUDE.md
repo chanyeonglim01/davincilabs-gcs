@@ -61,6 +61,9 @@ davincilabs_GCS/
 
 ## 에이전트 역할 및 파일 소유권
 
+> **중요**: Frontend UI/UX (`src/renderer/src/components/**`) 수정은 **사용자가 직접 지시**합니다.
+> 팀 에이전트 자율 배정 금지. 사용자 명시 요청 시에만 작업합니다.
+
 ### Agent 1 (Foundation/Architect) - Opus
 
 **소유 파일**:
@@ -80,7 +83,7 @@ davincilabs_GCS/
 
 **책임**: MAVLink UDP 통신, IPC 핸들러, contextBridge
 
-### Agent 3 (Dashboard Frontend) - Sonnet
+### Agent 3 (Dashboard Frontend) - Sonnet ⚠️ 사용자 직접 지시 전용
 
 **소유 파일**:
 
@@ -89,6 +92,7 @@ davincilabs_GCS/
 - `src/renderer/src/hooks/useMavlink.ts`
 
 **책임**: 자세 차트, Avionics, Compass, 맵, Status Console
+**운영 방식**: 사용자가 직접 UI/UX 요구사항을 지시 → Claude가 단독 실행 (팀 에이전트 X)
 
 ### Agent 4 (Parameter Builder) - Sonnet
 
@@ -277,6 +281,65 @@ Ctrl+C (종료) → pnpm dev
 - [React 공식 문서](https://react.dev/)
 - [Tailwind CSS 문서](https://tailwindcss.com/docs)
 - [shadcn/ui 문서](https://ui.shadcn.com/)
+
+---
+
+## Frontend UI/UX 수정 규칙
+
+> **UI 컴포넌트를 새로 만들거나 대폭 개선할 때는 반드시 `frontend-design` skill을 사용합니다.**
+
+```
+/frontend-design  ← 이 skill을 먼저 호출한 뒤 작업
+```
+
+- 소규모 수정 (위치 조정, 색상, 숫자 변경): skill 없이 바로 Edit
+- 신규 컴포넌트 설계 / 대규모 UI 개편: `frontend-design` skill 사용
+- 사용자가 UI 변경을 요청하면 → 요구사항 파악 → skill 실행 → 구현
+
+**디자인 시스템 요약** (반드시 준수):
+```
+색상:  #181C14 / #3C3D37 / #ECDFCC  (이 3가지만 사용)
+폰트:  JetBrains Mono (수치/데이터), Space Grotesk (레이블/UI)
+간격:  패널 간 8px 통일
+```
+
+---
+
+## 개발 로드맵 및 테스트 전략
+
+### 작업 우선순위
+
+1. **CONNECT 버튼 실제 동작** (높음)
+   - Header의 UDP host/port 입력값으로 실제 소켓 재연결
+   - `window.mavlink.connect({ host, port })` IPC 구현
+
+2. **웨이포인트 업로드** (높음)
+   - 지도 클릭 → 웨이포인트 추가/삭제
+   - MAVLink Mission Protocol: MISSION_COUNT → MISSION_ITEM_INT → MISSION_ACK
+   - Simulink S-Function에 이미 미션 수신 로직 있음 (`mavlinkGCS_sfunc.m`)
+
+3. **파라미터 빌더** (중간)
+   - PARAM_REQUEST_LIST / PARAM_VALUE 수신
+   - React Flow 노드 에디터 (`src/renderer/src/features/builder/`)
+   - PID 게인 등 파라미터 시각화 + PARAM_SET 송신
+
+4. **비행 궤적 표시** (낮음)
+   - 지도에 GPS 트랙 폴리라인
+
+### 테스트 전략: SITL → Simulink 순서
+
+**Phase 1: PX4 SITL로 GCS 완성도 검증**
+```bash
+# px4/ 폴더에서
+make px4_sitl jmavsim
+# UDP 14550 MAVLink 송출 → GCS 14551 수신
+```
+- MAVLink 표준 완벽 준수 → 미션 프로토콜, 파라미터 모두 즉시 테스트 가능
+- QGC와 병행 비교로 디버깅 용이
+
+**Phase 2: Simulink 최종 연동**
+- SITL에서 완성된 GCS → 포트/SysID만 맞춰 Simulink 연결
+- UAM 모델 특화 동작 검증
 
 ---
 
