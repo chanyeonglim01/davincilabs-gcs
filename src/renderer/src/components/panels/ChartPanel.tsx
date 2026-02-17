@@ -81,7 +81,7 @@ function SeriesToggle({ label, active, onClick }: { label: string; active: boole
 
 export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const { history } = useTelemetryStore()
-  const [size, setSize] = useState({ width: 420, height: 360 })
+  const [size, setSize] = useState({ width: 320, height: 260 })
   const [chartCollapsed, setChartCollapsed] = useState<Record<string, boolean>>({
     attitude: false, rate: false, speed: false
   })
@@ -91,7 +91,7 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
     gndspd: true, airspd: true,
   })
   const resizing = useRef(false)
-  const resizeStart = useRef({ x: 0, y: 0, w: 420, h: 360 })
+  const resizeStart = useRef({ x: 0, y: 0, w: 320, h: 260 })
 
   const toggle = (key: string) => setVisible((v) => ({ ...v, [key]: !v[key] }))
   const toggleChart = (id: string) => setChartCollapsed((v) => ({ ...v, [id]: !v[id] }))

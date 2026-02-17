@@ -35,10 +35,10 @@ function DraggablePanel({ initialX, initialY, children }: DraggablePanelProps) {
 // ─── MapOverlay ────────────────────────────────────────────────────────────────
 export function MapOverlay() {
   const [collapsed, setCollapsed] = useState({
-    instruments: false,  // open: instruments always visible on startup
-    telemetry: true,     // collapsed: bottom bar
-    chart: true,         // collapsed: bottom bar
-    log: true            // collapsed: bottom bar
+    instruments: false,  // open: top-left
+    chart: false,        // open: below instruments on left
+    log: false,          // open: below charts on left
+    telemetry: false,    // open: right side below commands
   })
 
   const toggle = (key: keyof typeof collapsed) =>
@@ -61,15 +61,24 @@ export function MapOverlay() {
       <Header />
 
       {/* ── FIXED PANELS ─────────────────────────────────────────────────────── */}
+      {/* Right column: Avionics + Status stacked with consistent gap */}
       <div
         style={{
           position: 'absolute',
           top: '68px',
           right: '20px',
-          zIndex: 1100
+          zIndex: 1100,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
         }}
       >
         <AvionicsPanel />
+        <TelemetryPanel
+          onDragHandle={() => {}}
+          collapsed={collapsed.telemetry}
+          onToggle={() => toggle('telemetry')}
+        />
       </div>
 
       {/* ── DRAGGABLE PANELS ─────────────────────────────────────────────────── */}
@@ -84,33 +93,24 @@ export function MapOverlay() {
         )}
       </DraggablePanel>
 
-      {/* Bottom row: STATUS | LOG | CHARTS — all collapsed on startup */}
-      <DraggablePanel initialX={20} initialY={730}>
-        {(handle) => (
-          <TelemetryPanel
-            onDragHandle={handle}
-            collapsed={collapsed.telemetry}
-            onToggle={() => toggle('telemetry')}
-          />
-        )}
-      </DraggablePanel>
-
-      <DraggablePanel initialX={250} initialY={730}>
-        {(handle) => (
-          <LogPanel
-            onDragHandle={handle}
-            collapsed={collapsed.log}
-            onToggle={() => toggle('log')}
-          />
-        )}
-      </DraggablePanel>
-
-      <DraggablePanel initialX={644} initialY={730}>
+      {/* Left: Charts (open, below instruments) */}
+      <DraggablePanel initialX={20} initialY={290}>
         {(handle) => (
           <ChartPanel
             onDragHandle={handle}
             collapsed={collapsed.chart}
             onToggle={() => toggle('chart')}
+          />
+        )}
+      </DraggablePanel>
+
+      {/* Left: Log (open, below charts, same gap as Instruments→Charts) */}
+      <DraggablePanel initialX={20} initialY={624}>
+        {(handle) => (
+          <LogPanel
+            onDragHandle={handle}
+            collapsed={collapsed.log}
+            onToggle={() => toggle('log')}
           />
         )}
       </DraggablePanel>

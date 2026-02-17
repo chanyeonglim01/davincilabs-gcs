@@ -27,10 +27,10 @@ export function addLog(level: LogEntry['level'], msg: string) {
 
 export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([...globalLogs])
-  const [size, setSize] = useState({ width: 380, height: 180 })
+  const [size, setSize] = useState({ width: 320, height: 200 })
   const bottomRef = useRef<HTMLDivElement>(null)
   const resizing = useRef(false)
-  const resizeStart = useRef({ x: 0, y: 0, w: 380, h: 180 })
+  const resizeStart = useRef({ x: 0, y: 0, w: 320, h: 200 })
 
   useEffect(() => {
     const update = () => setLogs([...globalLogs])
