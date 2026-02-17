@@ -50,6 +50,7 @@ export function Header() {
         left: 0,
         right: 0,
         height: '56px',
+        zIndex: 1200,
         background: 'rgba(24, 28, 20, 0.92)',
         borderBottom: '1px solid rgba(236, 223, 204, 0.1)',
         backdropFilter: 'blur(16px)',
@@ -57,7 +58,6 @@ export function Header() {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 20px',
-        zIndex: 50,
         userSelect: 'none',
         overflow: 'visible'
       }}

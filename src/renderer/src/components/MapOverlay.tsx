@@ -24,7 +24,7 @@ function DraggablePanel({ initialX, initialY, children }: DraggablePanelProps) {
         position: 'absolute',
         left: pos.x,
         top: pos.y,
-        zIndex: 20
+        zIndex: 1100  // above Leaflet controls (1000)
       }}
     >
       {children(onMouseDown)}
@@ -54,32 +54,25 @@ export function MapOverlay() {
         background: '#181C14'
       }}
     >
-      {/* Full-screen map — lowest layer */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-        <MapBackground />
-      </div>
+      {/* Full-screen map — no stacking context wrapper, natural layer */}
+      <MapBackground />
 
-      {/* Fixed header */}
-      <div style={{ position: 'relative', zIndex: 30 }}>
-        <Header />
-      </div>
+      {/* Fixed header — z-index 1200 (topmost) */}
+      <Header />
 
       {/* ── FIXED PANELS ─────────────────────────────────────────────────────── */}
-      {/* Top-right: Avionics display */}
       <div
         style={{
           position: 'absolute',
           top: '68px',
           right: '20px',
-          zIndex: 20
+          zIndex: 1100
         }}
       >
         <AvionicsPanel />
       </div>
 
-
       {/* ── DRAGGABLE PANELS ─────────────────────────────────────────────────── */}
-      {/* Instruments - initially top-left */}
       <DraggablePanel initialX={20} initialY={68}>
         {(handle) => (
           <InstrumentsPanel
@@ -90,7 +83,6 @@ export function MapOverlay() {
         )}
       </DraggablePanel>
 
-      {/* Telemetry numbers - initially bottom-right area */}
       <DraggablePanel initialX={20} initialY={420}>
         {(handle) => (
           <TelemetryPanel
@@ -101,7 +93,6 @@ export function MapOverlay() {
         )}
       </DraggablePanel>
 
-      {/* Chart - initially bottom-center */}
       <DraggablePanel initialX={280} initialY={580}>
         {(handle) => (
           <ChartPanel
@@ -112,7 +103,6 @@ export function MapOverlay() {
         )}
       </DraggablePanel>
 
-      {/* Log - initially bottom-left */}
       <DraggablePanel initialX={20} initialY={580}>
         {(handle) => (
           <LogPanel
