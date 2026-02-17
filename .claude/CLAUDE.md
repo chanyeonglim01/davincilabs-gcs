@@ -280,5 +280,54 @@ Ctrl+C (종료) → pnpm dev
 
 ---
 
-**버전**: v1.0.0
-**최종 업데이트**: 2026-02-16
+## UI 구현 현황 (2026-02-17)
+
+> Agent 3 (Dashboard Frontend) 작업 완료 항목
+
+### 완료된 컴포넌트
+
+**레이아웃 구조** (`MapOverlay.tsx`)
+- 전체 화면 Leaflet 지도 위 오버레이 패널 구조
+- 초기 배치: Instruments(좌상단 open) → Charts(좌 open) → Log(좌하단 open) / Avionics+Status(우측 고정 flex column)
+- 패널 간 간격 8px 통일
+- z-index: 지도 내부 200~1000, 패널 1100, 헤더 1200, 타일 토글 1050
+
+**지도** (`MapBackground.tsx`)
+- Leaflet, ESRI World Imagery(SAT) / CartoDB Dark(MAPS) 전환
+- 드론 마커: 흰색 VTOL SVG (96×112px) + 주황 헤딩 직선
+- heading 회전: CSS `transform: rotate(${heading}deg)`
+- CSP `img-src`에 타일 서버 도메인 추가 필수 (`index.html`)
+- Main Process에 `onHeadersReceived` CORS bypass 적용 (`src/main/index.ts`)
+
+**계기판** (`InstrumentsPanel.tsx`, 643px 고정)
+- AirspeedIndicator, AltimeterIndicator, HeadingDial, VsiIndicator — 모두 커스텀 SVG
+- 각 SVG 크기 140px, 모노 + 다크 계기반 디자인
+
+**AvionicsPanel** (`AvionicsPanel.tsx`, 220px 고정)
+- HorizonIndicator: SVG 인공 수평선 (`HorizonIndicator.tsx`)
+- COMMANDS: ARM/DISARM/TAKEOFF/LAND/HOLD/RTL → 확인 다이얼로그 → `window.mavlink.sendCommand()`
+
+**ChartPanel** (`ChartPanel.tsx`)
+- 초기 크기 320×260px, 우하단 리사이즈 핸들
+- 3개 차트 각각 독립 collapse, 시리즈 토글 버튼
+- `history.slice(-60)` → rad→deg 변환 후 Recharts LineChart
+
+**LogPanel** (`LogPanel.tsx`)
+- 초기 크기 320×200px, 전역 `addLog(level, msg)` 사용
+- INFO/WARN/ERR 레벨 별 색상 + 행 배경
+
+**TelemetryPanel** (`TelemetryPanel.tsx`, STATUS)
+- 220px 고정 너비, AvionicsPanel과 flex column으로 묶어 자동 배치
+
+### 알려진 주의사항
+
+- `davincilabs_GCS/` 는 별도 git repo (`chanyeonglim01/davincilabs-gcs`) → 커밋은 해당 폴더 내부에서
+- Leaflet 타일 표시 안 될 때: `index.html` CSP `img-src` 확인
+- 지도 사이즈 깨질 때: `map.invalidateSize()` 호출 필요
+- 패널이 지도 아래로 묻힐 때: z-index 1100 이상 필요 (Leaflet controls는 1000)
+- STATUS 패널 AvionicsPanel과 겹칠 때: 두 패널을 `flex column` 컨테이너로 묶어 해결
+
+---
+
+**버전**: v1.1.0
+**최종 업데이트**: 2026-02-17

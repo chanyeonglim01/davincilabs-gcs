@@ -159,6 +159,39 @@ davincilabs_GCS/
               └──────────────────────┘
 ```
 
+## 📊 구현 현황 (2026-02-17)
+
+### 완료
+
+| 항목 | 상태 | 비고 |
+|------|------|------|
+| Electron + Vite 초기 설정 | ✅ | |
+| MAVLink UDP 수신/파싱 | ✅ | HEARTBEAT, ATTITUDE, POSITION, VFR_HUD, SYS_STATUS |
+| COMMAND_LONG 송신 | ✅ | ARM, DISARM, TAKEOFF, LAND, HOLD, RTL |
+| Zustand 텔레메트리 스토어 | ✅ | telemetry + history(300) |
+| Header (연결 UI) | ✅ | UDP/COM 탭, 연결 상태 표시 |
+| MapBackground | ✅ | Leaflet, ESRI 위성/CartoDB 다크 전환, 드론 마커 |
+| InstrumentsPanel | ✅ | Airspeed / Altitude / Heading / VSI (커스텀 SVG) |
+| AvionicsPanel | ✅ | ARM STATUS + MODE + HorizonIndicator + COMMANDS |
+| ChartPanel | ✅ | ATTITUDE/RATE/SPEED 3개 차트, 리사이즈 |
+| LogPanel | ✅ | INFO/WARN/ERR 레벨 컬러, 리사이즈 |
+| TelemetryPanel (STATUS) | ✅ | LAT/LON/ALT/GND SPD/AIR SPD/BAT |
+| 드론 아이콘 | ✅ | 흰색 VTOL + 주황 헤딩 라인 |
+| 패널 드래그 이동 | ✅ | useDraggable hook |
+| 패널 리사이즈 | ✅ | ChartPanel, LogPanel |
+| 패널 collapse 토글 | ✅ | 전 패널 |
+
+### 미구현 (예정)
+
+| 항목 | 우선순위 |
+|------|---------|
+| CONNECT 버튼 실제 동작 (포트/호스트 변경) | 높음 |
+| COM/Serial 실제 통신 | 중간 |
+| 지도 비행 궤적 표시 | 중간 |
+| Parameter Builder (React Flow) | 낮음 |
+| 미션 플래닝 / 웨이포인트 업로드 | 낮음 |
+| 경보 시스템 (배터리/신호) | 낮음 |
+
 ## 👥 Team Agents
 
 병렬 개발을 위한 4개 에이전트:
@@ -173,11 +206,12 @@ davincilabs_GCS/
 ## 📝 Roadmap
 
 - [x] 프로젝트 구조 및 문서
-- [ ] Electron-Vite 프로젝트 초기화
-- [ ] MAVLink UDP 통신
-- [ ] Dashboard UI (자세 차트, Avionics, 맵)
+- [x] Electron-Vite 프로젝트 초기화
+- [x] MAVLink UDP 통신
+- [x] Dashboard UI (계기판, Avionics, 차트, 지도, 로그, STATUS)
+- [ ] CONNECT 버튼 동적 연결
 - [ ] Parameter Builder (React Flow)
-- [ ] Dual Mode 전환
+- [ ] 미션 플래닝
 - [ ] macOS/Windows 패키징
 
 ## 🤝 Contributing
