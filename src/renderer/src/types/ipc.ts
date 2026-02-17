@@ -11,8 +11,9 @@ export type ConnectionMode = 'simulink' | 'real-drone'
 
 export interface ConnectionConfig {
   mode: ConnectionMode
-  host: string // e.g. '127.0.0.1'
-  port: number // e.g. 14551
+  host: string       // e.g. '127.0.0.1'
+  port: number       // local UDP listen port (GCS receives here)
+  remotePort?: number // remote UDP send port (drone listens here); defaults to port
   sysid: number
   compid: number
 }

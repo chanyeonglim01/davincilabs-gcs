@@ -136,7 +136,7 @@ export class MavlinkConnection extends EventEmitter {
     }
 
     const host = remoteHost || this.config.host
-    const port = remotePort || this.config.port
+    const port = remotePort || this.config.remotePort || this.config.port
 
     this.socket.send(buffer, port, host, (err) => {
       if (err) {
