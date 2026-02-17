@@ -10,7 +10,7 @@ import icon from '../../resources/icon.png?asset'
 
 // MAVLink connection and parser
 import { getMavlinkConnection } from './mavlink/connection'
-import { MavlinkParser } from './mavlink/parser'
+import { getMavlinkParser } from './mavlink/parser'
 
 // IPC handlers
 import { registerTelemetryHandlers, sendTelemetryUpdate, sendHomePosition } from './ipc/telemetry'
@@ -21,7 +21,6 @@ import { registerParameterHandlers, sendParamValue } from './ipc/parameters'
 import { getConnectionConfig, getWindowBounds, setWindowBounds } from './store'
 
 let mainWindow: BrowserWindow | null = null
-let parser: MavlinkParser | null = null
 
 function createWindow(): void {
   const bounds = getWindowBounds()
@@ -74,7 +73,7 @@ function createWindow(): void {
  */
 function initializeMavlink(): void {
   const connection = getMavlinkConnection()
-  parser = new MavlinkParser()
+  const parser = getMavlinkParser()
 
   // Wire up parser events to IPC
   parser.on('telemetry', (data) => {
@@ -102,7 +101,7 @@ function initializeMavlink(): void {
 
   // Wire up connection events to parser
   connection.on('data', (buffer) => {
-    parser?.parseBuffer(buffer)
+    parser.parseBuffer(buffer)
   })
 
   connection.on('connected', () => {

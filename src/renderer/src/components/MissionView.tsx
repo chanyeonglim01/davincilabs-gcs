@@ -306,11 +306,14 @@ export function MissionView() {
     setUploading(true)
     setUploadMsg(null)
     try {
-      // TODO: actual MAVLink mission upload IPC
-      await new Promise((r) => setTimeout(r, 800))
-      setUploadMsg(`✓ ${waypoints.length} items uploaded`)
-    } catch {
-      setUploadMsg('✗ Upload failed')
+      const result = await window.mavlink?.uploadMission(waypoints)
+      if (result?.success) {
+        setUploadMsg(`✓ ${result.count} items uploaded`)
+      } else {
+        setUploadMsg(`✗ ${result?.error ?? 'Upload failed'}`)
+      }
+    } catch (err) {
+      setUploadMsg(`✗ ${err instanceof Error ? err.message : 'Upload failed'}`)
     } finally {
       setUploading(false)
     }

@@ -20,6 +20,8 @@ export interface MavlinkParserEvents {
   paramValue: (param: ParamEntry) => void
   commandAck: (result: CommandResult) => void
   heartbeat: () => void
+  missionRequest: (seq: number) => void
+  missionAck: (type: number) => void
 }
 
 export declare interface MavlinkParser {
@@ -136,6 +138,15 @@ export class MavlinkParser extends EventEmitter {
         break
       case 77: // COMMAND_ACK
         this.handleCommandAck(packet)
+        break
+      case 40: // MISSION_REQUEST (legacy, used by some autopilots)
+        this.emit('missionRequest', packet.readUInt16LE(10))
+        break
+      case 51: // MISSION_REQUEST_INT (PX4 preferred)
+        this.emit('missionRequest', packet.readUInt16LE(10))
+        break
+      case 47: // MISSION_ACK
+        this.emit('missionAck', packet.readUInt8(12))
         break
       default:
       // console.log(`[MAVLink Parser] Unhandled msgid: ${msgid}`)
@@ -365,4 +376,14 @@ export class MavlinkParser extends EventEmitter {
     }
     return resultMap[result] || `Result: ${result}`
   }
+}
+
+// ─── Singleton ────────────────────────────────────────────────────────────────
+let _parser: MavlinkParser | null = null
+
+export function getMavlinkParser(): MavlinkParser {
+  if (!_parser) {
+    _parser = new MavlinkParser()
+  }
+  return _parser
 }

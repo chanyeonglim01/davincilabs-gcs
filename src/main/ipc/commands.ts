@@ -10,7 +10,10 @@ import type {
   ConnectionConfig
 } from '../../renderer/src/types'
 import { getMavlinkConnection } from '../mavlink/connection'
+import { getMavlinkParser } from '../mavlink/parser'
 import { commandToBuffer, getCommandDescription } from '../mavlink/commander'
+import { MissionUploader } from '../mavlink/mission'
+import type { MissionWaypoint } from '../mavlink/mission'
 import { sendLogMessage } from './telemetry'
 
 /**
@@ -104,5 +107,36 @@ export function registerCommandHandlers(): void {
   ipcMain.handle('mavlink:get-connection-status', async (_event) => {
     const connection = getMavlinkConnection()
     return connection.getStatus()
+  })
+
+  // Upload mission waypoints via MAVLink Mission Protocol
+  ipcMain.handle('mavlink:upload-mission', async (_event, waypoints: MissionWaypoint[]) => {
+    const connection = getMavlinkConnection()
+    const parser = getMavlinkParser()
+
+    if (!connection.isConnected) {
+      return { success: false, count: 0, error: 'Not connected to vehicle' }
+    }
+
+    const uploader = new MissionUploader(connection)
+
+    const onRequest = (seq: number): void => uploader.onRequest(seq)
+    const onAck = (type: number): void => uploader.onAck(type)
+
+    parser.on('missionRequest', onRequest)
+    parser.on('missionAck', onAck)
+
+    try {
+      const result = await uploader.upload(waypoints)
+      if (result.success) {
+        sendLogMessage('info', `Mission uploaded: ${result.count} items`)
+      } else {
+        sendLogMessage('error', `Mission upload failed: ${result.error}`)
+      }
+      return result
+    } finally {
+      parser.off('missionRequest', onRequest)
+      parser.off('missionAck', onAck)
+    }
   })
 }

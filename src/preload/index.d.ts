@@ -28,6 +28,7 @@ declare global {
       requestParams(): Promise<void>
       setParam(param: ParamEntry): Promise<void>
       getConnectionStatus(): Promise<ConnectionStatus>
+      uploadMission(waypoints: { action: string; lat: number; lon: number; alt: number; acceptRadius: number; loiterRadius: number }[]): Promise<{ success: boolean; count: number; error?: string }>
 
       // Listen (Main -> Renderer, callback)
       // Each returns cleanup function

@@ -28,6 +28,8 @@ const mavlinkAPI = {
   requestParams: (): Promise<void> => ipcRenderer.invoke('mavlink:request-params'),
   setParam: (param: ParamEntry): Promise<void> => ipcRenderer.invoke('mavlink:set-param', param),
   getConnectionStatus: (): Promise<ConnectionStatus> => ipcRenderer.invoke('mavlink:get-connection-status'),
+  uploadMission: (waypoints: { action: string; lat: number; lon: number; alt: number; acceptRadius: number; loiterRadius: number }[]): Promise<{ success: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke('mavlink:upload-mission', waypoints),
 
   // Listen (Main -> Renderer)
   onTelemetryUpdate: (callback: (data: TelemetryData) => void) => {
