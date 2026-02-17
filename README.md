@@ -13,6 +13,7 @@ Electron 기반 크로스 플랫폼 Ground Control Station for UAM Simulation & 
 ## ✨ Features
 
 ### 🎯 Real-time Telemetry Dashboard
+
 - **자세 차트**: Roll/Pitch/Yaw 실시간 그래프
 - **Avionics Display**: 비행 모드 표시 + ARM/TAKEOFF/LAND 명령
 - **Compass & 게이지**: D3.js 커스텀 시각화
@@ -20,12 +21,14 @@ Electron 기반 크로스 플랫폼 Ground Control Station for UAM Simulation & 
 - **Status Console**: 시스템 로그 스트림
 
 ### 🔧 Visual Parameter Builder
+
 - **React Flow 노드 에디터**: 파라미터 관계 시각화
 - **PX4/Simulink 파라미터**: PID 게인, 제한값 관리
 - **실시간 검증**: 범위 체크 및 의존성 검사
 - **저장/불러오기**: JSON 템플릿
 
 ### 🚁 Dual Mode Support
+
 - **Simulink 시뮬레이션**: UAM_Flight_control.slx와 통신
 - **실제 드론/PX4 SITL**: UDP/TCP/Serial 연결
 
@@ -48,6 +51,7 @@ Electron 기반 크로스 플랫폼 Ground Control Station for UAM Simulation & 
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 20+ LTS
 - pnpm 9+
 - MATLAB/Simulink (시뮬레이션 모드)
@@ -119,11 +123,13 @@ davincilabs_GCS/
 ## 🔌 Communication
 
 ### Simulink Mode
+
 - **Protocol**: MAVLink v2
 - **Connection**: UDP 14551 (localhost)
 - **System ID**: 1, **Component ID**: 1
 
 ### Real Drone Mode
+
 - **Protocol**: MAVLink v2
 - **Connection**: UDP/TCP/Serial (설정 가능)
 - **System/Component ID**: 사용자 지정

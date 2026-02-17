@@ -3,11 +3,13 @@
 ## 에이전트 구성 (6명)
 
 ### 모델 선택 전략
+
 - **Opus 4.6**: 계획 및 아키텍처 (복잡한 사고)
 - **Sonnet 4.5**: 코드 구현, 문서 작성 (기본, 가성비)
 - **Haiku 4.5**: 빠른 검증, 테스트 실행
 
 ### 병렬 실행 방법
+
 - **Claude Code Task 도구**: 한 메시지에 여러 Task 호출하면 병렬 실행
 - **tmux**: 개발 서버 관리용 (선택 사항, 에이전트와 무관)
 - **EXPERIMENTAL_AGENT_TEAMS**: 불필요 (Task 도구로 충분)
@@ -21,6 +23,7 @@
 **우선순위**: 최고 (모든 에이전트가 의존)
 
 ### 태스크
+
 1. ✅ 프로젝트 문서 작성 (이미 완료)
 2. Electron-Vite 프로젝트 초기화
    - `pnpm create @quick-start/electron` 실행
@@ -36,6 +39,7 @@
 7. 기본 Electron 앱 실행 확인
 
 ### 산출물
+
 - `electron.vite.config.ts`
 - `package.json`, `tsconfig.json`
 - `src/renderer/src/types/*.ts`
@@ -43,6 +47,7 @@
 - 실행 가능한 기본 Electron 앱
 
 ### 완료 조건
+
 - `pnpm dev` 실행 시 Electron 창 열림
 - TypeScript 컴파일 에러 없음
 - 다른 에이전트가 타입 import 가능
@@ -56,6 +61,7 @@
 **우선순위**: 높음
 
 ### 태스크
+
 1. `src/main/mavlink/connection.ts`:
    - UDP 소켓 생성 (dgram 모듈)
    - Simulink 모드 (localhost:14551)
@@ -78,6 +84,7 @@
 7. 모드 전환 로직
 
 ### 산출물
+
 - `src/main/index.ts`
 - `src/main/mavlink/*.ts`
 - `src/main/ipc/*.ts`
@@ -85,9 +92,11 @@
 - `src/main/store.ts`
 
 ### 블로킹 의존성
+
 - Agent 1의 타입 정의 완료 필요
 
 ### 테스트
+
 - Simulink `mavlink_mission_test.m` 실행
 - Main Process 콘솔에 수신 메시지 로그
 - Renderer로 IPC 데이터 전송 확인
@@ -103,6 +112,7 @@
 ### 태스크 (우선순위 순)
 
 #### 1. 프로젝트 초기화
+
 - React + Vite 설정 (이미 electron-vite에 포함)
 - Tailwind CSS 설치 및 설정
 - shadcn/ui 컴포넌트 설치
@@ -110,6 +120,7 @@
 - Zustand 스토어 초기화
 
 #### 2. 자세 차트 (Roll/Pitch/Yaw) - **우선순위 1**
+
 - `components/telemetry/AttitudeCharts.tsx`
 - Recharts LineChart
 - 실시간 업데이트 (30Hz throttle)
@@ -117,6 +128,7 @@
 - 목표값 vs 실제값 비교
 
 #### 3. Avionics Display + 명령 버튼 - **우선순위 2**
+
 - `components/avionics/FlightModeDisplay.tsx`
 - 비행 모드 표시 (STABILIZE, LOITER, AUTO 등)
 - `components/avionics/CommandButtons.tsx`
@@ -125,6 +137,7 @@
 - IPC 명령 전송 (`window.mavlink.sendCommand`)
 
 #### 4. Compass + 게이지 - **우선순위 3**
+
 - `components/telemetry/Compass.tsx`
 - D3.js 커스텀 Compass (SVG)
 - 방향 표시 및 애니메이션
@@ -132,6 +145,7 @@
 - Airspeed, Altitude, Vertical Speed 게이지
 
 #### 5. 맵 뷰 - **우선순위 4**
+
 - `components/map/MapView.tsx`
 - Leaflet 맵 초기화
 - 드론 위치 마커 (실시간 업데이트)
@@ -139,11 +153,13 @@
 - Home 위치 표시
 
 #### 6. Status Console - **우선순위 5**
+
 - `components/console/StatusConsole.tsx`
 - 로그 스트림 (가상 스크롤)
 - 레벨 필터링 (ERROR, WARN, INFO)
 
 ### 산출물
+
 - `src/renderer/src/App.tsx`
 - `src/renderer/src/components/**/*.tsx`
 - `src/renderer/src/store/telemetryStore.ts`
@@ -151,10 +167,12 @@
 - Tailwind 설정
 
 ### 블로킹 의존성
+
 - Agent 1의 타입 정의 필요
 - Agent 2의 IPC API 필요 (통합 테스트)
 
 ### 디자인 참고
+
 - 첫 번째 이미지 (다크 테마, 네온 블루/그린)
 
 ---
@@ -168,46 +186,55 @@
 ### 태스크
 
 #### 1. React Flow 설정
+
 - `features/builder/ParameterBuilder.tsx`
 - React Flow 초기화
 - 노드 추가/삭제/연결
 - Dagre 레이아웃
 
 #### 2. 노드 타입 정의
+
 - `features/builder/nodes/ParameterNode.tsx`
 - PID 게인 노드 (Roll_P, Roll_I, Roll_D)
 - 제한값 노드 (Max_Speed, Max_Accel)
 - 센서 캘리브레이션 노드
 
 #### 3. 컴포넌트 팔레트
+
 - `features/builder/Palette.tsx`
 - 드래그앤드롭으로 노드 추가
 - 그룹 분류 (Flight Control, Navigation, Safety)
 
 #### 4. 속성 패널
+
 - `features/builder/PropertyPanel.tsx`
 - 선택 노드 파라미터 편집
 - 실시간 유효성 검사 (범위 체크)
 
 #### 5. 저장/불러오기
+
 - JSON 직렬화
 - electron API로 파일 저장
 
 #### 6. MAVLink PARAM 프로토콜
+
 - PARAM_REQUEST_LIST로 드론에서 읽기
 - PARAM_SET으로 업로드
 - 진행률 표시
 
 ### 산출물
+
 - `src/renderer/src/features/builder/**/*.tsx`
 - `src/renderer/src/store/builderStore.ts`
 - PX4 파라미터 스키마 JSON
 
 ### 블로킹 의존성
+
 - Agent 1 타입 정의
 - Agent 2 PARAM IPC API
 
 ### 디자인 참고
+
 - 두 번째 이미지 (노드 그래프)
 
 ---
@@ -221,35 +248,41 @@
 ### 태스크
 
 #### 1. IPC API 문서
+
 - `docs/IPC_API.md`
 - 모든 IPC 채널 명세
 - 요청/응답 예시
 - 에러 처리
 
 #### 2. MAVLink 통신 문서
+
 - `docs/MAVLINK_PROTOCOL.md`
 - 지원 메시지 목록
 - 파싱 로직 설명
 - 시퀀스 다이어그램
 
 #### 3. 사용자 가이드
+
 - `docs/USER_GUIDE.md`
 - 설치 및 실행
 - 기본 사용법
 - 트러블슈팅
 
 #### 4. 개발자 가이드
+
 - `docs/DEVELOPER_GUIDE.md`
 - 개발 환경 설정
 - 코드 구조 설명
 - 기여 방법
 
 #### 5. 컴포넌트 API 문서
+
 - `docs/COMPONENT_API.md`
 - React 컴포넌트 Props
 - 사용 예시
 
 ### 산출물
+
 - `docs/IPC_API.md`
 - `docs/MAVLINK_PROTOCOL.md`
 - `docs/USER_GUIDE.md`
@@ -257,6 +290,7 @@
 - `docs/COMPONENT_API.md`
 
 ### 블로킹 의존성
+
 - Agent 2, 3, 4 코드 완료 후 문서화 가능
 
 ---
@@ -270,44 +304,52 @@
 ### 태스크
 
 #### 1. 린트 및 타입 체크
+
 - ESLint 실행 및 에러 수정
 - TypeScript 타입 체크
 - Prettier 포맷팅
 
 #### 2. 유닛 테스트
+
 - Vitest 설정
 - MAVLink 파서 테스트
 - IPC 핸들러 테스트
 - React 컴포넌트 테스트 (React Testing Library)
 
 #### 3. 통합 테스트
+
 - Simulink → Main → Renderer 전체 플로우
 - 명령 전송 테스트 (ARM, TAKEOFF)
 - 파라미터 업로드/다운로드
 
 #### 4. E2E 테스트
+
 - Playwright 설정
 - 실제 Electron 앱 실행
 - UI 인터랙션 테스트
 - 스크린샷 비교
 
 #### 5. 성능 프로파일링
+
 - 텔레메트리 업데이트 레이트 측정
 - 메모리 누수 확인
 - CPU 사용률 모니터링
 
 #### 6. 보안 검증
+
 - electron-builder security 체크
 - nodeIntegration: false 확인
 - contextIsolation: true 확인
 
 ### 산출물
+
 - `tests/unit/**/*.test.ts`
 - `tests/integration/**/*.test.ts`
 - `tests/e2e/**/*.spec.ts`
 - `docs/TEST_REPORT.md`
 
 ### 블로킹 의존성
+
 - Agent 2, 3, 4 코드 완료 필요
 
 ---
@@ -359,6 +401,7 @@ Agent 1을 Opus 모델로 실행하여 Electron 프로젝트 초기화
 
 ```markdown
 Agent 1 완료 후, Agent 2와 3을 동시에 Sonnet 모델로 실행
+
 - Agent 2: MAVLink 통신 구현
 - Agent 3: Dashboard UI 구현
 ```
@@ -389,14 +432,14 @@ tail -f ~/.claude/logs/*.log
 
 ## 에이전트 역할 요약
 
-| Agent | 모델 | 역할 | 블로킹 의존성 |
-|-------|------|------|--------------|
-| Agent 1 | Opus | 아키텍처 설계 + 타입 정의 | 없음 (최우선) |
-| Agent 2 | Sonnet | MAVLink 통신 (Main) | Agent 1 |
-| Agent 3 | Sonnet | Dashboard UI (Renderer) | Agent 1, 2 |
-| Agent 4 | Sonnet | Parameter Builder (Renderer) | Agent 1, 2 |
-| Agent 5 | Sonnet/Haiku | 문서 작성 | Agent 2, 3, 4 |
-| Agent 6 | Sonnet/Haiku | 코드 검증 + 테스트 | Agent 2, 3, 4 |
+| Agent   | 모델         | 역할                         | 블로킹 의존성 |
+| ------- | ------------ | ---------------------------- | ------------- |
+| Agent 1 | Opus         | 아키텍처 설계 + 타입 정의    | 없음 (최우선) |
+| Agent 2 | Sonnet       | MAVLink 통신 (Main)          | Agent 1       |
+| Agent 3 | Sonnet       | Dashboard UI (Renderer)      | Agent 1, 2    |
+| Agent 4 | Sonnet       | Parameter Builder (Renderer) | Agent 1, 2    |
+| Agent 5 | Sonnet/Haiku | 문서 작성                    | Agent 2, 3, 4 |
+| Agent 6 | Sonnet/Haiku | 코드 검증 + 테스트           | Agent 2, 3, 4 |
 
 ---
 
