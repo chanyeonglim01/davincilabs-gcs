@@ -43,7 +43,7 @@ export function TelemetryChart() {
         pitchRate: telemetry.attitude.pitchspeed * (180 / Math.PI),
         yawRate: telemetry.attitude.yawspeed * (180 / Math.PI),
         altitude: telemetry.position.relative_alt,
-        voltage: telemetry.battery.voltage
+        voltage: telemetry.status.battery.voltage
       }
 
       setData((prev) => {

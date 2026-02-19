@@ -143,6 +143,53 @@ export function AvionicsPanel() {
         >
           {systemStatus}
         </div>
+        {/* Mode selector buttons */}
+        <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
+          {(['MANUAL', 'AUTO', 'EMER'] as const).map((mode) => {
+            const modeMap: Record<string, string> = { MANUAL: 'MANUAL', AUTO: 'AUTO.MISSION', EMER: 'EMERGENCY' }
+            const isActive = flightMode === modeMap[mode] || (mode === 'AUTO' && flightMode.startsWith('AUTO'))
+            return (
+              <button
+                key={mode}
+                onClick={() => {
+                  const targetMode = mode === 'EMER' ? 'STABILIZED' : modeMap[mode]
+                  window.mavlink?.sendCommand({ type: 'SET_MODE', params: { mode: targetMode } })
+                }}
+                style={{
+                  flex: 1,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  padding: '5px 2px',
+                  border: isActive
+                    ? '1px solid rgba(236, 223, 204, 0.6)'
+                    : '1px solid rgba(236, 223, 204, 0.15)',
+                  borderRadius: '3px',
+                  background: isActive ? 'rgba(236, 223, 204, 0.12)' : 'rgba(60, 61, 55, 0.3)',
+                  color: isActive ? '#ECDFCC' : 'rgba(236, 223, 204, 0.5)',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(60,61,55,0.7)'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(236,223,204,0.85)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(60,61,55,0.3)'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(236,223,204,0.5)'
+                  }
+                }}
+              >
+                {mode}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Horizon Indicator */}

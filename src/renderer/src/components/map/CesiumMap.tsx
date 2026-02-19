@@ -19,7 +19,6 @@ export function CesiumMap(): React.ReactElement {
     if (!containerRef.current || viewerRef.current) return
 
     const viewer = new Cesium.Viewer(containerRef.current, {
-      terrainProvider: Cesium.createWorldTerrain(),
       timeline: false,
       animation: false,
       baseLayerPicker: false,

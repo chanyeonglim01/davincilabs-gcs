@@ -20,7 +20,7 @@ import {
   sendLogMessage
 } from './ipc/telemetry'
 import { registerCommandHandlers } from './ipc/commands'
-import { registerParameterHandlers, sendParamValue, sendParamProgress } from './ipc/parameters'
+import { registerParameterHandlers, sendParamValue, sendParamProgress, onParamRequest } from './ipc/parameters'
 
 // Store
 import { getConnectionConfig, getWindowBounds, setWindowBounds } from './store'
@@ -102,6 +102,12 @@ function initializeMavlink(): void {
     if (paramTotalCount > 0) {
       sendParamProgress(paramReceivedCount, paramTotalCount)
     }
+  })
+
+  // Reset param counters when a new PARAM_REQUEST_LIST is sent
+  onParamRequest(() => {
+    paramTotalCount = 0
+    paramReceivedCount = 0
   })
 
   parser.on('commandAck', (result) => {

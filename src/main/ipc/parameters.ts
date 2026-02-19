@@ -10,6 +10,11 @@ import { sendLogMessage } from './telemetry'
 
 let mainWindow: BrowserWindow | null = null
 const parameterCache = new Map<string, ParamEntry>()
+let onParamRequestCallback: (() => void) | null = null
+
+export function onParamRequest(cb: () => void): void {
+  onParamRequestCallback = cb
+}
 
 /**
  * Register parameter IPC handlers
@@ -26,8 +31,9 @@ export function registerParameterHandlers(window: BrowserWindow): void {
         throw new Error('Not connected to vehicle')
       }
 
-      // Clear cache
+      // Clear cache and reset progress counters
       parameterCache.clear()
+      onParamRequestCallback?.()
 
       // Send PARAM_REQUEST_LIST (msgid 21)
       const buffer = createParamRequestList()
