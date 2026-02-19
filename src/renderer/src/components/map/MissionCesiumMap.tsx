@@ -3,7 +3,7 @@ import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import type { Waypoint } from '@renderer/store/missionStore'
-import droneIconUrl from '@renderer/assets/drone_icon.png'
+import droneIconUrl from '@renderer/assets/drone_icon.svg'
 
 const _droneImg = new Image()
 _droneImg.src = droneIconUrl
@@ -141,8 +141,8 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
         position: Cesium.Cartesian3.fromDegrees(initLon, initLat, 0),
         billboard: {
           image:                    createDroneIcon(0),
-          width:                    96,
-          height:                   112,
+          width:                    128,
+          height:                   184,
           heightReference:          Cesium.HeightReference.CLAMP_TO_GROUND,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
@@ -482,28 +482,45 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
   )
 })
 
-// ─── Drone icon using user-supplied drone_icon.png + heading line ─────────────
+// ─── Drone icon using drone_icon.svg + heading line ─────────────────────────
+const _ICON_W = 128
+const _ICON_H = 184
+const _DRONE_Y = 50
+const _DRONE_H = 83  // 128 / (1011/659)
+
 function createDroneIcon(heading: number): string {
   const K = 4
+  const ICON_W = _ICON_W
+  const ICON_H = _ICON_H
+  const DRONE_Y = _DRONE_Y
+  const DRONE_H = _DRONE_H
   const canvas = document.createElement('canvas')
-  canvas.width  = 96  * K  // 384
-  canvas.height = 112 * K  // 448
+  canvas.width  = ICON_W * K
+  canvas.height = ICON_H * K
   const ctx = canvas.getContext('2d')!
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   ctx.scale(K, K)
 
+  const cx = 64
+  const cy = 92  // DRONE_Y + DRONE_H/2 = 50 + 41.5
+
   ctx.save()
-  ctx.translate(48, 64)
+  ctx.translate(cx, cy)
   ctx.rotate((heading * Math.PI) / 180)
-  ctx.translate(-48, -64)
+  ctx.translate(-cx, -cy)
 
-  // Heading indicator line
-  ctx.beginPath(); ctx.moveTo(48, 1); ctx.lineTo(48, 15)
-  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke()
+  // Heading indicator (기체 앞쪽으로 뻗음)
+  ctx.save()
+  ctx.globalAlpha = 0.35
+  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
+  ctx.strokeStyle = '#FFB060'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke()
+  ctx.restore()
+  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
+  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke()
 
-  // Drone image (96×96, starts at y=16)
+  // Drone SVG
   if (_droneImg.complete && _droneImg.naturalWidth > 0) {
-    ctx.drawImage(_droneImg, 0, 16, 96, 96)
+    ctx.drawImage(_droneImg, 0, DRONE_Y, ICON_W, DRONE_H)
   }
 
   ctx.restore()

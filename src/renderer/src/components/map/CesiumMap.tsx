@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+import droneIconUrl from '@renderer/assets/drone_icon.svg'
+
+// Preload drone image at module init
+const _droneImg = new Image()
+_droneImg.src = droneIconUrl
 
 const DEFAULT_LON = 126.978
 const DEFAULT_LAT = 37.5665
@@ -229,137 +234,44 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
   )
 }
 
-/**
- * Canvas-based 3D-style drone icon for Cesium billboard.
- * SVG data URLs have rendering issues in Cesium (negative viewBox clipping).
- * Canvas 2D API is fully deterministic and adds volumetric depth for the 3D map.
- * Coordinates are shifted +16 from SVG viewBox="0 -16 96 112" → canvas y origin at 0.
- */
-// Billboard display size (matches 2D Leaflet iconSize: [96, 112])
-const ICON_W = 96
-const ICON_H = 112
+// DRONE_Y=50: heading line y=2→48 (46px, 앞쪽으로 뻗음), drone y=50→133
+// body center=91.5≈92, ICON_H=184 → center=92 → 2D/3D anchor 일치
+const ICON_W = 128
+const ICON_H = 184
+const DRONE_Y = 50
+const DRONE_H = 83   // 128 / (1011/659)
 
 function createDroneIcon(heading: number): string {
-  // Draw canvas at 4× the logical 96×112 coordinate space (384×448 px)
-  // so Cesium never upscales the PNG regardless of zoom level → no pixelation
   const K = 4
   const canvas = document.createElement('canvas')
-  canvas.width = 96 * K   // 384
-  canvas.height = 112 * K // 448
+  canvas.width  = ICON_W * K
+  canvas.height = ICON_H * K
   const ctx = canvas.getContext('2d')!
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   ctx.scale(K, K)
 
-  // Rotate around aircraft center (matches Leaflet transform-origin: 48px 64px)
+  // Rotation pivot = drone body center = icon center
+  const cx = 64
+  const cy = 92
+
   ctx.save()
-  ctx.translate(48, 64)
+  ctx.translate(cx, cy)
   ctx.rotate((heading * Math.PI) / 180)
-  ctx.translate(-48, -64)
+  ctx.translate(-cx, -cy)
 
-  // ── DROP SHADOW ──────────────────────────────────────────────────────────────
+  // Heading indicator: glow + core line (기체 앞쪽, y=2→48)
   ctx.save()
-  ctx.globalAlpha = 0.22
-  ctx.filter = 'blur(4px)'
-  ctx.translate(3, 4)
-  ctx.beginPath()
-  ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 82)
-  ctx.lineTo(48, 69); ctx.lineTo(91, 82); ctx.lineTo(92, 76); ctx.closePath()
-  ctx.fillStyle = '#000000'; ctx.fill()
+  ctx.globalAlpha = 0.35
+  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
+  ctx.strokeStyle = '#FFB060'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke()
   ctx.restore()
+  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
+  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke()
 
-  // ── HEADING LINE ─────────────────────────────────────────────────────────────
-  // Glow halo
-  ctx.save(); ctx.globalAlpha = 0.30
-  ctx.beginPath(); ctx.moveTo(48, 2); ctx.lineTo(48, 36)
-  ctx.strokeStyle = '#FFB060'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke()
-  ctx.restore()
-  // Core line
-  ctx.beginPath(); ctx.moveTo(48, 2); ctx.lineTo(48, 36)
-  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke()
-
-  // ── WING SHADOW ──────────────────────────────────────────────────────────────
-  ctx.save(); ctx.globalAlpha = 0.28
-  ctx.beginPath()
-  ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 82)
-  ctx.lineTo(48, 69); ctx.lineTo(91, 82); ctx.lineTo(92, 76); ctx.closePath()
-  ctx.fillStyle = '#000000'; ctx.fill(); ctx.restore()
-
-  // ── WINGS (gradient lit from top) ────────────────────────────────────────────
-  const wg = ctx.createLinearGradient(48, 54, 48, 82)
-  wg.addColorStop(0, '#FFFFFF'); wg.addColorStop(0.45, '#E8EBF2'); wg.addColorStop(1, '#B8BDD0')
-  ctx.beginPath()
-  ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 81)
-  ctx.lineTo(48, 69); ctx.lineTo(91, 81); ctx.lineTo(92, 76); ctx.closePath()
-  ctx.fillStyle = wg; ctx.fill()
-
-  // Leading edge cyan accent
-  ctx.save(); ctx.globalAlpha = 0.55
-  ctx.beginPath()
-  ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 78); ctx.lineTo(48, 60); ctx.closePath()
-  ctx.fillStyle = '#00CFFF'; ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(48, 58); ctx.lineTo(92, 76); ctx.lineTo(91, 78); ctx.lineTo(48, 60); ctx.closePath()
-  ctx.fillStyle = '#00CFFF'; ctx.fill()
-  ctx.restore()
-
-  // ── FUSELAGE (vertical gradient) ─────────────────────────────────────────────
-  const fg = ctx.createLinearGradient(42, 46, 54, 90)
-  fg.addColorStop(0, '#D0D8F0'); fg.addColorStop(0.2, '#FFFFFF')
-  fg.addColorStop(0.8, '#FFFFFF'); fg.addColorStop(1, '#C8CEDF')
-  ctx.beginPath(); ctx.ellipse(48, 68, 4.5, 22, 0, 0, Math.PI * 2)
-  ctx.fillStyle = fg; ctx.fill()
-  // Specular highlight on fuselage
-  ctx.save(); ctx.globalAlpha = 0.42
-  ctx.beginPath(); ctx.ellipse(47, 63, 1.8, 12, -0.15, 0, Math.PI * 2)
-  ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore()
-
-  // ── CANARDS ───────────────────────────────────────────────────────────────────
-  ctx.save(); ctx.globalAlpha = 0.82
-  ctx.beginPath()
-  ctx.moveTo(48, 47); ctx.lineTo(32, 53); ctx.lineTo(32, 56)
-  ctx.lineTo(48, 50); ctx.lineTo(64, 56); ctx.lineTo(64, 53); ctx.closePath()
-  ctx.fillStyle = '#DCE6F8'; ctx.fill(); ctx.restore()
-
-  // ── TAIL FINS ─────────────────────────────────────────────────────────────────
-  ctx.save(); ctx.globalAlpha = 0.70
-  ctx.beginPath(); ctx.moveTo(43, 87); ctx.lineTo(35, 100); ctx.lineTo(38, 101); ctx.lineTo(46, 89); ctx.closePath()
-  ctx.fillStyle = '#CDD5E6'; ctx.fill()
-  ctx.beginPath(); ctx.moveTo(53, 87); ctx.lineTo(61, 100); ctx.lineTo(58, 101); ctx.lineTo(50, 89); ctx.closePath()
-  ctx.fillStyle = '#CDD5E6'; ctx.fill()
-  ctx.restore()
-
-  // ── WING ROTOR PODS (radial gradient = sphere illusion) ───────────────────────
-  const pods: [number, number][] = [[7, 77], [89, 77]]
-  for (const [px, py] of pods) {
-    const pg = ctx.createRadialGradient(px - 2, py - 1.5, 0.5, px, py, 5.5)
-    pg.addColorStop(0, '#4A5878'); pg.addColorStop(0.65, '#1a1a2a'); pg.addColorStop(1, '#07070E')
-    ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI * 2)
-    ctx.fillStyle = pg; ctx.fill()
-    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.5; ctx.stroke()
+  // Drone SVG
+  if (_droneImg.complete && _droneImg.naturalWidth > 0) {
+    ctx.drawImage(_droneImg, 0, DRONE_Y, ICON_W, DRONE_H)
   }
-
-  // ── CENTER ENGINE RING ────────────────────────────────────────────────────────
-  // Outer glow ring
-  ctx.save(); ctx.globalAlpha = 0.20
-  ctx.beginPath(); ctx.arc(48, 68, 9, 0, Math.PI * 2)
-  ctx.fillStyle = '#00CFFF'; ctx.fill(); ctx.restore()
-  // Dark housing
-  const eg = ctx.createRadialGradient(46, 66, 0.5, 48, 68, 7)
-  eg.addColorStop(0, '#3C4468'); eg.addColorStop(0.75, '#1a1a2a'); eg.addColorStop(1, '#07070E')
-  ctx.beginPath(); ctx.arc(48, 68, 7, 0, Math.PI * 2)
-  ctx.fillStyle = eg; ctx.fill()
-  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.8; ctx.stroke()
-  // Glowing core
-  const cg = ctx.createRadialGradient(47.5, 67.5, 0, 48, 68, 3)
-  cg.addColorStop(0, '#CCFFFF'); cg.addColorStop(0.5, '#00CFFF'); cg.addColorStop(1, '#0077AA')
-  ctx.beginPath(); ctx.arc(48, 68, 3, 0, Math.PI * 2)
-  ctx.fillStyle = cg; ctx.fill()
-
-  // ── NOSE ─────────────────────────────────────────────────────────────────────
-  const ng = ctx.createRadialGradient(47.5, 44, 0.3, 48, 45, 3.5)
-  ng.addColorStop(0, '#CCFFFF'); ng.addColorStop(0.55, '#00CFFF'); ng.addColorStop(1, '#0077AA')
-  ctx.beginPath(); ctx.ellipse(48, 45, 3, 3.5, 0, 0, Math.PI * 2)
-  ctx.fillStyle = ng; ctx.fill()
 
   ctx.restore()
   return canvas.toDataURL('image/png')

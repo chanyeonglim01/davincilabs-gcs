@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import droneIconSvg from '@renderer/assets/drone_icon.svg'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -115,50 +116,18 @@ function markerHtml(seq: number, def: ActionDef, filled: boolean): string {
     </div>`
 }
 
-// ─── Drone icon (same as MapBackground) ───────────────────────────────────────
+// ─── Drone icon: drone_icon.svg + heading line (128×128, anchor at center=drone body center) ──
 function createDroneIcon(heading: number): L.DivIcon {
   return L.divIcon({
     html: `
-      <div style="width:96px;height:112px;transform:rotate(${heading}deg);transform-origin:48px 64px;">
-        <svg width="96" height="112" viewBox="0 -16 96 112" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- Heading line (orange, extends from nose upward) -->
-          <line x1="48" y1="-14" x2="48" y2="20" stroke="#E87020" stroke-width="2.5" stroke-linecap="round"/>
-
-          <!-- Dark outline for contrast on bright backgrounds -->
-          <ellipse cx="48" cy="52" rx="6" ry="24" fill="#111" fill-opacity="0.5"/>
-          <path d="M48 42 L4 60 L5 66 L48 53 L91 66 L92 60 Z" fill="#111" fill-opacity="0.4"/>
-
-          <!-- Fuselage -->
-          <ellipse cx="48" cy="52" rx="4.5" ry="22" fill="#FFFFFF"/>
-
-          <!-- Main swept wings -->
-          <path d="M48 42 L4 60 L5 65 L48 53 L91 65 L92 60 Z" fill="#FFFFFF" fill-opacity="0.92"/>
-          <!-- Wing leading edge (subtle accent) -->
-          <path d="M48 42 L4 60 L5 62 L48 44 Z" fill="#00CFFF" fill-opacity="0.5"/>
-          <path d="M48 42 L92 60 L91 62 L48 44 Z" fill="#00CFFF" fill-opacity="0.5"/>
-
-          <!-- Canards (front mini-wings) -->
-          <path d="M48 31 L32 37 L32 40 L48 34 L64 40 L64 37 Z" fill="#FFFFFF" fill-opacity="0.75"/>
-
-          <!-- Twin tail fins -->
-          <path d="M43 71 L35 84 L38 85 L46 73 Z" fill="#FFFFFF" fill-opacity="0.65"/>
-          <path d="M53 71 L61 84 L58 85 L50 73 Z" fill="#FFFFFF" fill-opacity="0.65"/>
-
-          <!-- Wing rotor pods -->
-          <circle cx="7" cy="61" r="5.5" fill="#1a1a2a" stroke="#FFFFFF" stroke-width="1.5"/>
-          <circle cx="89" cy="61" r="5.5" fill="#1a1a2a" stroke="#FFFFFF" stroke-width="1.5"/>
-
-          <!-- Center engine ring -->
-          <circle cx="48" cy="52" r="7" fill="#1a1a2a" stroke="#FFFFFF" stroke-width="1.8"/>
-          <circle cx="48" cy="52" r="3" fill="#00CFFF"/>
-
-          <!-- Nose -->
-          <ellipse cx="48" cy="29" rx="3" ry="3.5" fill="#00CFFF"/>
-        </svg>
+      <div style="width:128px;height:184px;transform:rotate(${heading}deg);transform-origin:64px 92px;position:relative;">
+        <!-- Heading line: y=2→48 (46px), 기체 앞쪽으로 뻗음 -->
+        <div style="position:absolute;left:63px;top:2px;width:2px;height:46px;background:linear-gradient(to bottom,#FFB060,#E87020);border-radius:1px;box-shadow:0 0 5px rgba(255,176,96,0.5);"></div>
+        <img src="${droneIconSvg}" style="position:absolute;left:0;top:50px;width:128px;height:83px;display:block;" draggable="false"/>
       </div>
     `,
-    iconSize: [96, 112],
-    iconAnchor: [48, 64],
+    iconSize: [128, 184],
+    iconAnchor: [64, 92],
     className: '',
   })
 }
