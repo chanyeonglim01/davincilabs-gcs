@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -6,6 +6,13 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { useMissionStore, ActionKey, Waypoint } from '@renderer/store/missionStore'
+import { useTelemetryStore } from '@renderer/store/telemetryStore'
+
+const MissionCesiumMap = lazy(() =>
+  import('./map/MissionCesiumMap').then((m) => ({ default: m.MissionCesiumMap }))
+)
+
+type MapMode = '2d' | '3d'
 
 // ─── MAVLink command IDs ───────────────────────────────────────────────────────
 const MAV_CMD = {
@@ -93,6 +100,54 @@ function markerHtml(seq: number, def: ActionDef): string {
     </div>`
 }
 
+// ─── Drone icon (same as MapBackground) ───────────────────────────────────────
+function createDroneIcon(heading: number): L.DivIcon {
+  return L.divIcon({
+    html: `
+      <div style="width:96px;height:112px;transform:rotate(${heading}deg);transform-origin:48px 64px;">
+        <svg width="96" height="112" viewBox="0 -16 96 112" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Heading line (orange, extends from nose upward) -->
+          <line x1="48" y1="-14" x2="48" y2="20" stroke="#E87020" stroke-width="2.5" stroke-linecap="round"/>
+
+          <!-- Dark outline for contrast on bright backgrounds -->
+          <ellipse cx="48" cy="52" rx="6" ry="24" fill="#111" fill-opacity="0.5"/>
+          <path d="M48 42 L4 60 L5 66 L48 53 L91 66 L92 60 Z" fill="#111" fill-opacity="0.4"/>
+
+          <!-- Fuselage -->
+          <ellipse cx="48" cy="52" rx="4.5" ry="22" fill="#FFFFFF"/>
+
+          <!-- Main swept wings -->
+          <path d="M48 42 L4 60 L5 65 L48 53 L91 65 L92 60 Z" fill="#FFFFFF" fill-opacity="0.92"/>
+          <!-- Wing leading edge (subtle accent) -->
+          <path d="M48 42 L4 60 L5 62 L48 44 Z" fill="#00CFFF" fill-opacity="0.5"/>
+          <path d="M48 42 L92 60 L91 62 L48 44 Z" fill="#00CFFF" fill-opacity="0.5"/>
+
+          <!-- Canards (front mini-wings) -->
+          <path d="M48 31 L32 37 L32 40 L48 34 L64 40 L64 37 Z" fill="#FFFFFF" fill-opacity="0.75"/>
+
+          <!-- Twin tail fins -->
+          <path d="M43 71 L35 84 L38 85 L46 73 Z" fill="#FFFFFF" fill-opacity="0.65"/>
+          <path d="M53 71 L61 84 L58 85 L50 73 Z" fill="#FFFFFF" fill-opacity="0.65"/>
+
+          <!-- Wing rotor pods -->
+          <circle cx="7" cy="61" r="5.5" fill="#1a1a2a" stroke="#FFFFFF" stroke-width="1.5"/>
+          <circle cx="89" cy="61" r="5.5" fill="#1a1a2a" stroke="#FFFFFF" stroke-width="1.5"/>
+
+          <!-- Center engine ring -->
+          <circle cx="48" cy="52" r="7" fill="#1a1a2a" stroke="#FFFFFF" stroke-width="1.8"/>
+          <circle cx="48" cy="52" r="3" fill="#00CFFF"/>
+
+          <!-- Nose -->
+          <ellipse cx="48" cy="29" rx="3" ry="3.5" fill="#00CFFF"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [96, 112],
+    iconAnchor: [48, 64],
+    className: '',
+  })
+}
+
 // ─── Style constants ───────────────────────────────────────────────────────────
 const mono = "'JetBrains Mono', monospace"
 const sans = "'Space Grotesk', sans-serif"
@@ -113,18 +168,35 @@ const smallInput: React.CSSProperties = {
   padding: '3px 6px', outline: 'none',
 }
 
+const mapBtnStyle = (active: boolean): React.CSSProperties => ({
+  fontFamily: sans, fontSize: '9px', fontWeight: 600,
+  textTransform: 'uppercase', letterSpacing: '0.1em',
+  padding: '5px 10px',
+  border:      `1px solid ${active ? 'rgba(236,223,204,0.5)' : 'rgba(236,223,204,0.15)'}`,
+  borderRadius: '3px',
+  background:  'rgba(24,28,20,0.85)',
+  color:       active ? '#ECDFCC' : 'rgba(236,223,204,0.35)',
+  cursor: 'pointer',
+  backdropFilter: 'blur(8px)',
+})
+
 // ─── MissionView ───────────────────────────────────────────────────────────────
 export function MissionView() {
   const { waypoints, defaultAlt, setWaypoints, setDefaultAlt, nextUid, clearMission } = useMissionStore()
+  const { telemetry } = useTelemetryStore()
 
-  const mapContainerRef = useRef<HTMLDivElement>(null)
-  const mapRef          = useRef<L.Map | null>(null)
-  const markersRef      = useRef<Map<number, L.Marker>>(new Map())
-  const polylineRef     = useRef<L.Polyline | null>(null)
+  const mapContainerRef  = useRef<HTMLDivElement>(null)
+  const mapRef           = useRef<L.Map | null>(null)
+  const markersRef       = useRef<Map<number, L.Marker>>(new Map())
+  const polylineRef      = useRef<L.Polyline | null>(null)
+  const droneMarkerRef   = useRef<L.Marker | null>(null)
+  const hasCenteredRef   = useRef<boolean>(false)
 
   const [selectedUid, setSelectedUid] = useState<number | null>(null)
   const [uploading, setUploading]      = useState(false)
   const [uploadMsg, setUploadMsg]      = useState<string | null>(null)
+  const [mapMode, setMapMode]          = useState<MapMode>('2d')
+  const [cesiumCenter, setCesiumCenter] = useState<{ lon: number; lat: number; zoom: number } | null>(null)
 
   // ── Drag-to-reorder state ─────────────────────────────────────────────────────
   const dragUidRef = useRef<number | null>(null)
@@ -166,8 +238,21 @@ export function MissionView() {
       ])
     })
 
+    // Drone marker — always visible from the start (same as MapBackground)
+    const droneMarker = L.marker([37.5665, 126.978], {
+      icon: createDroneIcon(0),
+      interactive: false,
+      zIndexOffset: 1000,
+    }).addTo(map)
+
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null }
+    droneMarkerRef.current = droneMarker
+    return () => {
+      droneMarker.remove()
+      droneMarkerRef.current = null
+      map.remove()
+      mapRef.current = null
+    }
   }, [])
 
   // ── Sync markers + polyline ───────────────────────────────────────────────────
@@ -218,6 +303,51 @@ export function MissionView() {
       }).addTo(map)
     }
   }, [waypoints]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Drone marker: update position + heading from telemetry ───────────────────
+  useEffect(() => {
+    const map    = mapRef.current
+    const marker = droneMarkerRef.current
+    if (!map || !marker || !telemetry) return
+
+    const { lat, lon } = telemetry.position
+    if (lat === 0 && lon === 0) return
+
+    const latlng = new L.LatLng(lat, lon)
+
+    marker.setLatLng(latlng)
+    marker.setIcon(createDroneIcon(telemetry.heading ?? 0))
+
+    // First valid GPS fix → auto-center map on drone
+    if (!hasCenteredRef.current) {
+      hasCenteredRef.current = true
+      map.setView(latlng, Math.max(map.getZoom(), 16))
+    }
+  }, [telemetry?.position?.lat, telemetry?.position?.lon, telemetry?.heading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const centerOnDrone = () => {
+    const map = mapRef.current
+    if (!map || !telemetry) return
+    const { lat, lon } = telemetry.position
+    if (lat === 0 && lon === 0) return
+    map.setView(new L.LatLng(lat, lon), Math.max(map.getZoom(), 16))
+  }
+
+  // Restore Leaflet size when switching back to 2D
+  useEffect(() => {
+    if (mapMode === '2d' && mapRef.current) {
+      setTimeout(() => mapRef.current?.invalidateSize(), 100)
+    }
+  }, [mapMode])
+
+  const switchTo3D = () => {
+    const map = mapRef.current
+    if (map) {
+      const c = map.getCenter()
+      setCesiumCenter({ lon: c.lng, lat: c.lat, zoom: map.getZoom() })
+    }
+    setMapMode('3d')
+  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const updateWp = (uid: number, changes: Partial<Waypoint>) =>
@@ -338,6 +468,25 @@ export function MissionView() {
         <Stat label="DIST" value={waypoints.length >= 2 ? distStr : '—'} />
         <Divider />
 
+        {/* Center on drone */}
+        <button
+          onClick={centerOnDrone}
+          disabled={!telemetry || (telemetry.position.lat === 0 && telemetry.position.lon === 0)}
+          title="드론 위치로 이동"
+          style={{
+            fontFamily: mono, fontSize: '13px',
+            background: 'transparent',
+            border: `1px solid ${telemetry && (telemetry.position.lat !== 0 || telemetry.position.lon !== 0) ? 'rgba(79,195,247,0.4)' : 'rgba(236,223,204,0.1)'}`,
+            borderRadius: '4px',
+            color: telemetry && (telemetry.position.lat !== 0 || telemetry.position.lon !== 0) ? '#4FC3F7' : 'rgba(236,223,204,0.2)',
+            padding: '3px 9px', cursor: telemetry && (telemetry.position.lat !== 0 || telemetry.position.lon !== 0) ? 'pointer' : 'default',
+            lineHeight: 1,
+          }}
+        >
+          ⌖
+        </button>
+        <Divider />
+
         {/* Default altitude */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontFamily: sans, fontSize: '11px', color: 'rgba(236,223,204,0.4)', letterSpacing: '0.08em' }}>
@@ -410,7 +559,42 @@ export function MissionView() {
       {/* ── Map + Panel ──────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        <div ref={mapContainerRef} style={{ flex: 1 }} />
+        {/* ── Map area (2D / 3D) ────────────────────────────────────────── */}
+        <div style={{ flex: 1, position: 'relative' }}>
+
+          {/* Leaflet 2D */}
+          <div
+            ref={mapContainerRef}
+            style={{ position: 'absolute', inset: 0, display: mapMode === '2d' ? 'block' : 'none' }}
+          />
+
+          {/* Cesium 3D */}
+          {mapMode === '3d' && (
+            <Suspense fallback={
+              <div style={{
+                position: 'absolute', inset: 0, background: '#181C14',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: sans, fontSize: '11px', letterSpacing: '0.1em',
+                color: 'rgba(236,223,204,0.4)',
+              }}>
+                LOADING 3D...
+              </div>
+            }>
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <MissionCesiumMap initialCenter={cesiumCenter} waypoints={waypoints} />
+              </div>
+            </Suspense>
+          )}
+
+          {/* Map mode toggle (bottom-left) */}
+          <div style={{
+            position: 'absolute', bottom: '16px', left: '16px',
+            zIndex: 1050, display: 'flex', gap: '4px',
+          }}>
+            <button onClick={() => setMapMode('2d')} style={mapBtnStyle(mapMode === '2d')}>2D</button>
+            <button onClick={switchTo3D}             style={mapBtnStyle(mapMode === '3d')}>3D</button>
+          </div>
+        </div>
 
         {/* Right panel */}
         <div style={{

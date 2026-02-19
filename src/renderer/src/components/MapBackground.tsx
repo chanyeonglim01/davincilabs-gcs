@@ -75,6 +75,7 @@ export function MapBackground() {
   const tileLayerRef = useRef<L.TileLayer | null>(null)
   const [tileMode, setTileMode] = useState<TileMode>('satellite')
   const [mapMode, setMapMode] = useState<MapMode>('2d')
+  const [cesiumCenter, setCesiumCenter] = useState<{ lon: number; lat: number; zoom: number } | null>(null)
   const { telemetry } = useTelemetryStore()
 
   // Initialize map
@@ -180,7 +181,7 @@ export function MapBackground() {
           }
         >
           <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-            <CesiumMap />
+            <CesiumMap initialCenter={cesiumCenter} />
           </div>
         </Suspense>
       )}
@@ -209,7 +210,14 @@ export function MapBackground() {
           2D
         </button>
         <button
-          onClick={() => setMapMode('3d')}
+          onClick={() => {
+            const map = mapInstanceRef.current
+            if (map) {
+              const c = map.getCenter()
+              setCesiumCenter({ lon: c.lng, lat: c.lat, zoom: map.getZoom() })
+            }
+            setMapMode('3d')
+          }}
           style={btnStyle(mapMode === '3d')}
         >
           3D
