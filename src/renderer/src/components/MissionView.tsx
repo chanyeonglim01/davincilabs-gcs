@@ -8,6 +8,8 @@ import {
 import { useMissionStore, ActionKey, Waypoint } from '@renderer/store/missionStore'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 
+import type { MissionCesiumMapHandle } from './map/MissionCesiumMap'
+
 const MissionCesiumMap = lazy(() =>
   import('./map/MissionCesiumMap').then((m) => ({ default: m.MissionCesiumMap }))
 )
@@ -168,6 +170,20 @@ const smallInput: React.CSSProperties = {
   padding: '3px 6px', outline: 'none',
 }
 
+const TILES: Record<string, { url: string; maxZoom: number; subdomains?: string }> = {
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 19,
+  },
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    maxZoom: 20,
+    subdomains: 'abcd',
+  },
+}
+
+type TileMode = 'satellite' | 'dark'
+
 const mapBtnStyle = (active: boolean): React.CSSProperties => ({
   fontFamily: sans, fontSize: '9px', fontWeight: 600,
   textTransform: 'uppercase', letterSpacing: '0.1em',
@@ -178,6 +194,7 @@ const mapBtnStyle = (active: boolean): React.CSSProperties => ({
   color:       active ? '#ECDFCC' : 'rgba(236,223,204,0.35)',
   cursor: 'pointer',
   backdropFilter: 'blur(8px)',
+  transition: 'all 0.15s ease',
 })
 
 // ─── MissionView ───────────────────────────────────────────────────────────────
@@ -187,15 +204,18 @@ export function MissionView() {
 
   const mapContainerRef  = useRef<HTMLDivElement>(null)
   const mapRef           = useRef<L.Map | null>(null)
+  const tileLayerRef     = useRef<L.TileLayer | null>(null)
   const markersRef       = useRef<Map<number, L.Marker>>(new Map())
   const polylineRef      = useRef<L.Polyline | null>(null)
   const droneMarkerRef   = useRef<L.Marker | null>(null)
   const hasCenteredRef   = useRef<boolean>(false)
+  const cesiumMapRef     = useRef<MissionCesiumMapHandle>(null)
 
   const [selectedUid, setSelectedUid] = useState<number | null>(null)
   const [uploading, setUploading]      = useState(false)
   const [uploadMsg, setUploadMsg]      = useState<string | null>(null)
   const [mapMode, setMapMode]          = useState<MapMode>('2d')
+  const [tileMode, setTileMode]        = useState<TileMode>('satellite')
   const [cesiumCenter, setCesiumCenter] = useState<{ lon: number; lat: number; zoom: number } | null>(null)
 
   // ── Drag-to-reorder state ─────────────────────────────────────────────────────
@@ -213,11 +233,10 @@ export function MissionView() {
       zoomControl: false,
     })
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; CartoDB',
-      subdomains: 'abcd',
-      maxZoom: 20,
+    const tileLayer = L.tileLayer(TILES.satellite.url, {
+      maxZoom: TILES.satellite.maxZoom,
     }).addTo(map)
+    tileLayerRef.current = tileLayer
 
     L.control.zoom({ position: 'bottomleft' }).addTo(map)
 
@@ -251,9 +270,20 @@ export function MissionView() {
       droneMarker.remove()
       droneMarkerRef.current = null
       map.remove()
+      tileLayerRef.current = null
       mapRef.current = null
     }
   }, [])
+
+  // ── Switch tile layer when tileMode changes ───────────────────────────────────
+  useEffect(() => {
+    if (!tileLayerRef.current || !mapRef.current) return
+    const { url, maxZoom, subdomains } = TILES[tileMode]
+    tileLayerRef.current.setUrl(url)
+    tileLayerRef.current.options.maxZoom = maxZoom
+    if (subdomains) tileLayerRef.current.options.subdomains = subdomains
+    mapRef.current.invalidateSize()
+  }, [tileMode])
 
   // ── Sync markers + polyline ───────────────────────────────────────────────────
   useEffect(() => {
@@ -347,6 +377,16 @@ export function MissionView() {
       setCesiumCenter({ lon: c.lng, lat: c.lat, zoom: map.getZoom() })
     }
     setMapMode('3d')
+  }
+
+  const switchTo2D = (tile: TileMode) => {
+    // Sync Leaflet to current Cesium camera position+zoom before switching
+    if (mapMode === '3d' && cesiumMapRef.current && mapRef.current) {
+      const state = cesiumMapRef.current.getCameraState()
+      if (state) mapRef.current.setView([state.lat, state.lon], state.zoom)
+    }
+    setTileMode(tile)
+    setMapMode('2d')
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -581,18 +621,19 @@ export function MissionView() {
               </div>
             }>
               <div style={{ position: 'absolute', inset: 0 }}>
-                <MissionCesiumMap initialCenter={cesiumCenter} waypoints={waypoints} />
+                <MissionCesiumMap ref={cesiumMapRef} initialCenter={cesiumCenter} waypoints={waypoints} />
               </div>
             </Suspense>
           )}
 
-          {/* Map mode toggle (bottom-left) */}
+          {/* Map mode toggle (bottom-right) */}
           <div style={{
-            position: 'absolute', bottom: '16px', left: '16px',
+            position: 'absolute', bottom: '20px', right: '20px',
             zIndex: 1050, display: 'flex', gap: '4px',
           }}>
-            <button onClick={() => setMapMode('2d')} style={mapBtnStyle(mapMode === '2d')}>2D</button>
-            <button onClick={switchTo3D}             style={mapBtnStyle(mapMode === '3d')}>3D</button>
+            <button onClick={() => switchTo2D('satellite')} style={mapBtnStyle(mapMode === '2d' && tileMode === 'satellite')}>SAT</button>
+            <button onClick={() => switchTo2D('dark')}      style={mapBtnStyle(mapMode === '2d' && tileMode === 'dark')}>2D</button>
+            <button onClick={switchTo3D}                                           style={mapBtnStyle(mapMode === '3d')}>3D</button>
           </div>
         </div>
 
