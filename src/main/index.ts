@@ -6,6 +6,12 @@
 import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+
+// Must be called before app.whenReady() — fixes WebGL GPU process crash on macOS
+app.commandLine.appendSwitch('ignore-gpu-blacklist')
+app.commandLine.appendSwitch('enable-webgl', 'true')
+app.commandLine.appendSwitch('disable-gpu-process-crash-limit')
+app.commandLine.appendSwitch('use-angle', 'metal')
 import icon from '../../resources/icon.png?asset'
 
 // MAVLink connection and parser
@@ -167,13 +173,19 @@ app.whenReady().then(() => {
   })
 
   // Allow map tile requests (CORS bypass for external tile servers)
+  // Only add header if not already present — duplicate CORS headers cause ERR_FAILED
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Access-Control-Allow-Origin': ['*']
-      }
-    })
+    const headers = details.responseHeaders ?? {}
+    const hasCorHeader =
+      'access-control-allow-origin' in headers ||
+      'Access-Control-Allow-Origin' in headers
+    if (hasCorHeader) {
+      callback({})
+    } else {
+      callback({
+        responseHeaders: { ...headers, 'Access-Control-Allow-Origin': ['*'] }
+      })
+    }
   })
 
   createWindow()

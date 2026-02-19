@@ -8,15 +8,7 @@ interface Props {
   onToggle: () => void
 }
 
-const ACTIVE_COLOR = 'rgba(236, 223, 204, 0.9)'
-const INACTIVE_COLOR = 'rgba(236, 223, 204, 0.2)'
-const INACTIVE_BORDER = 'rgba(236, 223, 204, 0.12)'
-
-const LINE_STYLES = [
-  { strokeDasharray: undefined, opacity: 1.0 },
-  { strokeDasharray: '5 2',     opacity: 0.7 },
-  { strokeDasharray: '2 2',     opacity: 0.45 },
-]
+const SERIES_COLORS = ['#FFF1CB', '#C2E2FA', '#B7A3E3'] as const
 
 const CHARTS = [
   {
@@ -55,7 +47,7 @@ const CHARTS = [
 
 type VisibleState = Record<string, boolean>
 
-function SeriesToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function SeriesToggle({ label, active, color, onClick }: { label: string; active: boolean; color: string; onClick: () => void }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick() }}
@@ -66,10 +58,10 @@ function SeriesToggle({ label, active, onClick }: { label: string; active: boole
         letterSpacing: '0.1em',
         textTransform: 'uppercase',
         padding: '2px 6px',
-        border: `1px solid ${active ? ACTIVE_COLOR : INACTIVE_BORDER}`,
+        border: `1px solid ${active ? color : `${color}30`}`,
         borderRadius: '2px',
         background: 'transparent',
-        color: active ? ACTIVE_COLOR : INACTIVE_COLOR,
+        color: active ? color : `${color}50`,
         cursor: 'pointer',
         transition: 'all 0.15s ease'
       }}
@@ -222,11 +214,12 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
                   </div>
                   {!chartCollapsed[chart.id] && (
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      {chart.series.map((s) => (
+                      {chart.series.map((s, si) => (
                         <SeriesToggle
                           key={s.key}
                           label={s.label}
                           active={!!visible[s.key]}
+                          color={SERIES_COLORS[si] ?? SERIES_COLORS[0]}
                           onClick={() => toggle(s.key)}
                         />
                       ))}
@@ -264,9 +257,8 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
                             <Line
                               key={s.key}
                               dataKey={s.key}
-                              stroke={`rgba(236, 223, 204, ${LINE_STYLES[si].opacity})`}
+                              stroke={SERIES_COLORS[si] ?? SERIES_COLORS[0]}
                               strokeWidth={1.5}
-                              strokeDasharray={LINE_STYLES[si].strokeDasharray}
                               dot={false}
                               isAnimationActive={false}
                             />

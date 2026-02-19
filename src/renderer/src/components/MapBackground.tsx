@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+
+const CesiumMap = lazy(() =>
+  import('./map/CesiumMap').then((m) => ({ default: m.CesiumMap }))
+)
 
 const createDroneIcon = (heading: number) =>
   L.divIcon({
@@ -62,6 +66,7 @@ const TILES: Record<string, { url: string; maxZoom: number; subdomains?: string 
 }
 
 type TileMode = 'dark' | 'satellite'
+type MapMode = '2d' | '3d'
 
 export function MapBackground() {
   const mapRef = useRef<HTMLDivElement>(null)
@@ -69,6 +74,7 @@ export function MapBackground() {
   const markerRef = useRef<L.Marker | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
   const [tileMode, setTileMode] = useState<TileMode>('satellite')
+  const [mapMode, setMapMode] = useState<MapMode>('2d')
   const { telemetry } = useTelemetryStore()
 
   // Initialize map
@@ -112,6 +118,13 @@ export function MapBackground() {
     mapInstanceRef.current.invalidateSize()
   }, [tileMode])
 
+  // Restore Leaflet size when switching back to 2D
+  useEffect(() => {
+    if (mapMode === '2d' && mapInstanceRef.current) {
+      setTimeout(() => mapInstanceRef.current?.invalidateSize(), 100)
+    }
+  }, [mapMode])
+
   // Update marker position + heading rotation
   useEffect(() => {
     if (!telemetry || !markerRef.current) return
@@ -121,14 +134,58 @@ export function MapBackground() {
     markerRef.current.setIcon(createDroneIcon(telemetry.heading ?? 0))
   }, [telemetry?.position?.lat, telemetry?.position?.lon, telemetry?.heading])
 
+  const btnStyle = (active: boolean) => ({
+    fontFamily: "'Space Grotesk', sans-serif",
+    fontSize: '9px',
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.1em',
+    padding: '5px 10px',
+    border: `1px solid ${active ? 'rgba(236,223,204,0.5)' : 'rgba(236,223,204,0.15)'}`,
+    borderRadius: '3px',
+    background: 'rgba(24, 28, 20, 0.85)',
+    color: active ? '#ECDFCC' : 'rgba(236,223,204,0.35)',
+    cursor: 'pointer',
+    backdropFilter: 'blur(8px)',
+    transition: 'all 0.15s ease'
+  })
+
   return (
     <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+      {/* 2D Leaflet map */}
       <div
         ref={mapRef}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', background: '#181C14' }}
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          background: '#181C14',
+          display: mapMode === '2d' ? 'block' : 'none'
+        }}
       />
 
-      {/* Tile mode toggle */}
+      {/* 3D Cesium map */}
+      {mapMode === '3d' && (
+        <Suspense
+          fallback={
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#181C14',
+              color: 'rgba(236,223,204,0.4)',
+              fontFamily: "'Space Grotesk', sans-serif",
+              fontSize: '11px',
+              letterSpacing: '0.1em'
+            }}>
+              LOADING 3D...
+            </div>
+          }
+        >
+          <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+            <CesiumMap />
+          </div>
+        </Suspense>
+      )}
+
+      {/* Map controls */}
       <div
         style={{
           position: 'absolute',
@@ -139,29 +196,24 @@ export function MapBackground() {
           gap: '4px'
         }}
       >
-        {(['satellite', 'dark'] as TileMode[]).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setTileMode(mode)}
-            style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: '9px',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              padding: '5px 10px',
-              border: `1px solid ${tileMode === mode ? 'rgba(236,223,204,0.5)' : 'rgba(236,223,204,0.15)'}`,
-              borderRadius: '3px',
-              background: 'rgba(24, 28, 20, 0.85)',
-              color: tileMode === mode ? '#ECDFCC' : 'rgba(236,223,204,0.35)',
-              cursor: 'pointer',
-              backdropFilter: 'blur(8px)',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {mode === 'satellite' ? 'SAT' : 'MAPS'}
-          </button>
-        ))}
+        <button
+          onClick={() => { setMapMode('2d'); setTileMode('satellite') }}
+          style={btnStyle(mapMode === '2d' && tileMode === 'satellite')}
+        >
+          SAT
+        </button>
+        <button
+          onClick={() => { setMapMode('2d'); setTileMode('dark') }}
+          style={btnStyle(mapMode === '2d' && tileMode === 'dark')}
+        >
+          2D
+        </button>
+        <button
+          onClick={() => setMapMode('3d')}
+          style={btnStyle(mapMode === '3d')}
+        >
+          3D
+        </button>
       </div>
     </div>
   )
