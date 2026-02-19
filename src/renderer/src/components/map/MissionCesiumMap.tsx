@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
@@ -76,6 +76,7 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
   const justDraggedRef  = useRef(false)
 
   const telemetry = useTelemetryStore((state) => state.telemetry)
+  const [terrainLoaded, setTerrainLoaded] = useState(false)
 
   // ── Init Cesium viewer ───────────────────────────────────────────────────
   useEffect(() => {
@@ -109,7 +110,10 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
 
       // Cesium World Terrain (실제 지형 고도)
       Cesium.CesiumTerrainProvider.fromIonAssetId(1, { requestVertexNormals: false }).then((terrain) => {
-        if (viewerRef.current) viewerRef.current.terrainProvider = terrain
+        if (viewerRef.current) {
+          viewerRef.current.terrainProvider = terrain
+          setTerrainLoaded(true)
+        }
       }).catch(() => {})
 
       // OSM Buildings (3D 건물)
@@ -143,7 +147,7 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
           image:                    createDroneIcon(0),
           width:                    128,
           height:                   184,
-          heightReference:          Cesium.HeightReference.CLAMP_TO_GROUND,
+          heightReference:          Cesium.HeightReference.RELATIVE_TO_GROUND,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       })
@@ -399,7 +403,7 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
           image:                    createWaypointIcon(seq, colorHex, isSelected),
           width:                    40,
           height:                   40,
-          heightReference:           Cesium.HeightReference.NONE,
+          heightReference:           Cesium.HeightReference.RELATIVE_TO_GROUND,
           disableDepthTestDistance:  Number.POSITIVE_INFINITY,
           verticalOrigin:            Cesium.VerticalOrigin.CENTER,
           horizontalOrigin:          Cesium.HorizontalOrigin.CENTER,
@@ -422,7 +426,7 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
           verticalOrigin:   Cesium.VerticalOrigin.BOTTOM,
           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
           pixelOffset:      new Cesium.Cartesian2(0, -14),
-          heightReference:           Cesium.HeightReference.NONE,
+          heightReference:           Cesium.HeightReference.RELATIVE_TO_GROUND,
           disableDepthTestDistance:  Number.POSITIVE_INFINITY,
         },
       })
@@ -450,6 +454,51 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
     }
   }, [waypoints, selectedUid]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Terrain-corrected stick/path positions ────────────────────────────────
+  // Runs after waypoint entities are created AND when terrain loads.
+  // sampleTerrainMostDetailed returns height=0 with EllipsoidTerrainProvider (safe).
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || waypoints.length === 0) return
+
+    const navWps = waypoints.filter((wp) => HAS_ALT[wp.action])
+    if (navWps.length === 0) return
+
+    const cartographics = navWps.map((wp) =>
+      Cesium.Cartographic.fromDegrees(wp.lon, wp.lat)
+    )
+
+    let cancelled = false
+    Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, cartographics)
+      .then((sampled) => {
+        if (cancelled || !viewerRef.current) return
+
+        navWps.forEach((wp, i) => {
+          const terrainH = sampled[i]?.height ?? 0
+          const stick = viewerRef.current!.entities.getById(`wp-stick-${wp.uid}`)
+          if (stick?.polyline) {
+            stick.polyline.positions = new Cesium.ConstantProperty([
+              Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, terrainH),
+              Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, terrainH + wp.alt),
+            ])
+          }
+        })
+
+        const path = viewerRef.current!.entities.getById('wp-path')
+        if (path?.polyline && navWps.length >= 2) {
+          path.polyline.positions = new Cesium.ConstantProperty(
+            navWps.map((wp, i) => {
+              const terrainH = sampled[i]?.height ?? 0
+              return Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, terrainH + wp.alt)
+            })
+          )
+        }
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [waypoints, selectedUid, terrainLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Expose camera state to parent for 3D→2D zoom sync ───────────────────
   useImperativeHandle(ref, () => ({
     getCameraState: () => {
@@ -472,7 +521,7 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
       }
       // Cesium alt → Leaflet zoom (×2 reference = +1 zoom level to match 3D detail)
       const alt  = viewer.camera.positionCartographic.height
-      const zoom = Math.max(1, Math.min(20, Math.round(15 - Math.log2(Math.max(300, alt) / 5000))))
+      const zoom = Math.max(1, Math.min(20, Math.round(15 - Math.log2(Math.max(300, alt) / 2500))))
       return { lon, lat, zoom }
     },
   }))

@@ -39,20 +39,39 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const handleConnect = async () => {
-    if (mode !== 'udp') return
-    const port = parseInt(udpPort, 10)
-    if (isNaN(port)) return
-    setConnecting(true)
-    try {
-      const result = await window.mavlink?.reconnect({ host: udpHost, port })
-      if (result && !result.success) {
-        console.error('[Header] reconnect failed:', result.error)
+  // Sync input fields when auto-connect sets a different host/port
+  useEffect(() => {
+    if (connection.connected) {
+      setUdpHost(connection.host)
+      setUdpPort(String(connection.port))
+    }
+  }, [connection.connected, connection.host, connection.port])
+
+  const handleConnectionToggle = async () => {
+    if (connection.connected) {
+      setConnecting(true)
+      try {
+        await window.mavlink?.disconnect()
+      } catch (e) {
+        console.error('[Header] disconnect error:', e)
+      } finally {
+        setConnecting(false)
       }
-    } catch (e) {
-      console.error('[Header] reconnect error:', e)
-    } finally {
-      setConnecting(false)
+    } else {
+      if (mode !== 'udp') return
+      const port = parseInt(udpPort, 10)
+      if (isNaN(port)) return
+      setConnecting(true)
+      try {
+        const result = await window.mavlink?.reconnect({ host: udpHost, port })
+        if (result && !result.success) {
+          console.error('[Header] reconnect failed:', result.error)
+        }
+      } catch (e) {
+        console.error('[Header] reconnect error:', e)
+      } finally {
+        setConnecting(false)
+      }
     }
   }
 
@@ -65,7 +84,9 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
     color: '#ECDFCC',
     padding: '4px 8px',
     outline: 'none',
-    width: '100%'
+    width: '100%',
+    opacity: connection.connected ? 0.4 : 1,
+    pointerEvents: connection.connected ? 'none' : 'auto'
   }
 
   const connTabStyle = (active: boolean): React.CSSProperties => ({
@@ -250,7 +271,7 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
         <div style={{ width: '1px', height: '20px', background: 'rgba(236, 223, 204, 0.1)' }} />
 
         {/* Mode tabs */}
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '4px', opacity: connection.connected ? 0.4 : 1, pointerEvents: connection.connected ? 'none' : 'auto' }}>
           <button style={connTabStyle(mode === 'udp')} onClick={() => setMode('udp')}>
             UDP
           </button>
@@ -347,9 +368,9 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
           </div>
         )}
 
-        {/* Connect button */}
+        {/* Connect / Disconnect button */}
         <button
-          onClick={handleConnect}
+          onClick={handleConnectionToggle}
           disabled={connecting}
           style={{
             fontFamily: "'JetBrains Mono', monospace",
@@ -357,15 +378,21 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
             fontWeight: 700,
             letterSpacing: '0.06em',
             padding: '5px 14px',
-            border: '1px solid rgba(236, 223, 204, 0.3)',
             borderRadius: '3px',
-            background: connecting
-              ? 'rgba(236, 223, 204, 0.14)'
-              : 'rgba(236, 223, 204, 0.06)',
-            color: connecting ? 'rgba(236, 223, 204, 0.5)' : '#ECDFCC',
-            cursor: connecting ? 'default' : 'pointer',
             textTransform: 'uppercase',
-            transition: 'all 0.15s ease'
+            transition: 'all 0.15s ease',
+            cursor: connecting ? 'default' : 'pointer',
+            ...(connection.connected
+              ? {
+                  border: '1px solid rgba(236, 223, 204, 0.5)',
+                  background: connecting ? 'rgba(236, 223, 204, 0.14)' : 'rgba(236, 223, 204, 0.1)',
+                  color: connecting ? 'rgba(236, 223, 204, 0.4)' : 'rgba(236, 223, 204, 0.6)'
+                }
+              : {
+                  border: '1px solid rgba(236, 223, 204, 0.3)',
+                  background: connecting ? 'rgba(236, 223, 204, 0.14)' : 'rgba(236, 223, 204, 0.06)',
+                  color: connecting ? 'rgba(236, 223, 204, 0.5)' : '#ECDFCC'
+                })
           }}
           onMouseEnter={(e) => {
             if (!connecting)
@@ -374,11 +401,12 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
           }}
           onMouseLeave={(e) => {
             if (!connecting)
-              (e.currentTarget as HTMLButtonElement).style.background =
-                'rgba(236, 223, 204, 0.06)'
+              (e.currentTarget as HTMLButtonElement).style.background = connection.connected
+                ? 'rgba(236, 223, 204, 0.1)'
+                : 'rgba(236, 223, 204, 0.06)'
           }}
         >
-          {connecting ? '...' : 'CONNECT'}
+          {connecting ? '...' : connection.connected ? 'DISCONNECT' : 'CONNECT'}
         </button>
       </div>
     </header>
