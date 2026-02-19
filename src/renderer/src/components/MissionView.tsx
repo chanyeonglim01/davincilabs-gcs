@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -90,7 +90,20 @@ function altColor(alt: number): string {
   return '#E87020'
 }
 
-function markerHtml(seq: number, def: ActionDef): string {
+function markerHtml(seq: number, def: ActionDef, filled: boolean): string {
+  if (filled) {
+    // 위성 모드: 솔리드 fill + 어두운 아웃라인 (3D와 동일 스타일)
+    return `
+      <div style="width:32px;height:32px;border-radius:50%;
+        background:${def.color}DD;border:2px solid rgba(0,0,0,0.7);
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 2px 6px rgba(0,0,0,0.6);cursor:pointer;">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#181C14;line-height:1;">
+          ${seq}
+        </span>
+      </div>`
+  }
+  // 다크 모드: 링 스타일 (기존)
   return `
     <div style="width:32px;height:32px;border-radius:50%;
       background:${def.color}22;border:2px solid ${def.color};
@@ -304,7 +317,7 @@ export function MissionView() {
       seq++
 
       const marker = L.marker([wp.lat, wp.lon], {
-        icon: L.divIcon({ html: markerHtml(seq, def), iconSize: [32, 32], iconAnchor: [16, 16], className: '' }),
+        icon: L.divIcon({ html: markerHtml(seq, def, tileMode === 'satellite'), iconSize: [32, 32], iconAnchor: [16, 16], className: '' }),
         draggable: true,
       })
 
@@ -327,12 +340,12 @@ export function MissionView() {
 
     if (navPoints.length >= 2) {
       polylineRef.current = L.polyline(navPoints, {
-        color: 'rgba(79,195,247,0.55)',
-        weight: 2,
+        color: 'rgba(79,195,247,0.75)',
+        weight: 3,
         dashArray: '8 5',
       }).addTo(map)
     }
-  }, [waypoints]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [waypoints, tileMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Drone marker: update position + heading from telemetry ───────────────────
   useEffect(() => {
@@ -470,6 +483,30 @@ export function MissionView() {
       },
     ])
   }
+
+  // ── 3D 인터랙션 콜백 ────────────────────────────────────────────────────────
+  const handleCesiumAddWaypoint = useCallback((lat: number, lon: number) => {
+    const store = useMissionStore.getState()
+    const uid   = store.nextUid()
+    store.setWaypoints((prev) => [
+      ...prev,
+      {
+        uid,
+        action: 'WAYPOINT',
+        lat,
+        lon,
+        alt: store.defaultAlt,
+        acceptRadius: 5,
+        loiterRadius: 50,
+      },
+    ])
+  }, [])
+
+  const handleCesiumMoveWaypoint = useCallback((uid: number, lat: number, lon: number) => {
+    useMissionStore.getState().setWaypoints((prev) =>
+      prev.map((w) => (w.uid === uid ? { ...w, lat, lon } : w))
+    )
+  }, [])
 
   const handleUpload = async () => {
     if (waypoints.length === 0) return
@@ -621,7 +658,15 @@ export function MissionView() {
               </div>
             }>
               <div style={{ position: 'absolute', inset: 0 }}>
-                <MissionCesiumMap ref={cesiumMapRef} initialCenter={cesiumCenter} waypoints={waypoints} />
+                <MissionCesiumMap
+                  ref={cesiumMapRef}
+                  initialCenter={cesiumCenter}
+                  waypoints={waypoints}
+                  selectedUid={selectedUid}
+                  onAddWaypoint={handleCesiumAddWaypoint}
+                  onSelectWaypoint={(uid) => setSelectedUid((prev) => (prev === uid ? null : uid))}
+                  onMoveWaypoint={handleCesiumMoveWaypoint}
+                />
               </div>
             </Suspense>
           )}

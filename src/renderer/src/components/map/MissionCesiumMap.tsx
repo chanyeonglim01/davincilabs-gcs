@@ -3,6 +3,10 @@ import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import type { Waypoint } from '@renderer/store/missionStore'
+import droneIconUrl from '@renderer/assets/drone_icon.png'
+
+const _droneImg = new Image()
+_droneImg.src = droneIconUrl
 
 const DEFAULT_LON = 126.978
 const DEFAULT_LAT = 37.5665
@@ -33,6 +37,10 @@ const HAS_ALT: Record<string, boolean> = {
 interface MissionCesiumMapProps {
   initialCenter?: { lon: number; lat: number; zoom: number } | null
   waypoints: Waypoint[]
+  selectedUid?: number | null
+  onAddWaypoint?: (lat: number, lon: number) => void
+  onSelectWaypoint?: (uid: number | null) => void
+  onMoveWaypoint?: (uid: number, lat: number, lon: number) => void
 }
 
 export interface MissionCesiumMapHandle {
@@ -41,13 +49,31 @@ export interface MissionCesiumMapHandle {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesiumMapProps>(
-function MissionCesiumMap({ initialCenter, waypoints }, ref) {
+function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint, onSelectWaypoint, onMoveWaypoint }, ref) {
   const containerRef    = useRef<HTMLDivElement>(null)
   const viewerRef       = useRef<Cesium.Viewer | null>(null)
   const droneEntityRef  = useRef<Cesium.Entity | null>(null)
   const wpEntityIdsRef  = useRef<string[]>([])
   // initialCenter provided = user switched from 2D → keep that position, skip auto-fly
   const hasFlownRef     = useRef<boolean>(initialCenter != null)
+
+  // Callback refs — always point to latest prop without re-subscribing the handler
+  const onAddWaypointRef    = useRef(onAddWaypoint)
+  const onSelectWaypointRef = useRef(onSelectWaypoint)
+  const onMoveWaypointRef   = useRef(onMoveWaypoint)
+  onAddWaypointRef.current    = onAddWaypoint
+  onSelectWaypointRef.current = onSelectWaypoint
+  onMoveWaypointRef.current   = onMoveWaypoint
+
+  // 최신 waypoints를 드래그 핸들러에서 참조하기 위한 ref
+  const waypointsRef = useRef(waypoints)
+  waypointsRef.current = waypoints
+
+  // 드래그 상태
+  const dragStateRef    = useRef<{ uid: number } | null>(null)
+  const dragMovedRef    = useRef(false)
+  const lastDragPosRef  = useRef<{ lat: number; lon: number } | null>(null)
+  const justDraggedRef  = useRef(false)
 
   const telemetry = useTelemetryStore((state) => state.telemetry)
 
@@ -170,6 +196,160 @@ function MissionCesiumMap({ initialCenter, waypoints }, ref) {
     }
   }, [telemetry])
 
+  // ── 카메라 컨트롤 ON/OFF 헬퍼 ─────────────────────────────────────────────
+  function setCameraEnabled(viewer: Cesium.Viewer, enabled: boolean) {
+    const ctrl = viewer.scene.screenSpaceCameraController
+    ctrl.enableRotate    = enabled
+    ctrl.enableTranslate = enabled
+    ctrl.enableZoom      = enabled
+    ctrl.enableTilt      = enabled
+  }
+
+  // uid로 entity id prefix 파싱 ("wp-dot-42" → 42)
+  function parseWpUid(entityId: string): number | null {
+    if (!entityId.startsWith('wp-')) return null
+    const parts = entityId.split('-')
+    const uid = parseInt(parts[parts.length - 1], 10)
+    return isNaN(uid) ? null : uid
+  }
+
+  // ── 인터랙션 핸들러 (클릭 추가 / 선택 / 드래그 이동) ──────────────────────
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer) return
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas)
+
+    // ── LEFT_DOWN: 웨이포인트 위에서 누르면 드래그 시작 ──────────────────────
+    handler.setInputAction((e: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+      const picked = viewer.scene.pick(e.position)
+      if (!Cesium.defined(picked) || !(picked.id instanceof Cesium.Entity)) return
+      const uid = parseWpUid(picked.id.id)
+      if (uid === null) return
+
+      dragStateRef.current   = { uid }
+      dragMovedRef.current   = false
+      lastDragPosRef.current = null
+      setCameraEnabled(viewer, false)
+      viewer.canvas.style.cursor = 'grabbing'
+    }, Cesium.ScreenSpaceEventType.LEFT_DOWN)
+
+    // ── MOUSE_MOVE: 호버 커서 + 드래그 중 entity 위치 업데이트 ─────────────────
+    handler.setInputAction((e: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+      // 드래그 중이 아닐 때: 웨이포인트 위면 pointer, 아니면 default
+      if (!dragStateRef.current) {
+        const picked = viewer.scene.pick(e.endPosition)
+        if (Cesium.defined(picked) && picked.id instanceof Cesium.Entity && parseWpUid(picked.id.id) !== null) {
+          viewer.canvas.style.cursor = 'pointer'
+        } else {
+          viewer.canvas.style.cursor = 'default'
+        }
+        return
+      }
+      const { uid } = dragStateRef.current
+
+      const ray = viewer.camera.getPickRay(e.endPosition)
+      if (!ray) return
+      const cartesian = viewer.scene.globe.pick(ray, viewer.scene)
+      if (!cartesian) return
+
+      const carto = Cesium.Cartographic.fromCartesian(cartesian)
+      const lat = Cesium.Math.toDegrees(carto.latitude)
+      const lon = Cesium.Math.toDegrees(carto.longitude)
+
+      dragMovedRef.current   = true
+      lastDragPosRef.current = { lat, lon }
+
+      // 현재 웨이포인트 고도 참조
+      const wp  = waypointsRef.current.find((w) => w.uid === uid)
+      const alt = wp?.alt ?? 0
+
+      // dot + 고도 라벨 위치 이동
+      const newPos = Cesium.Cartesian3.fromDegrees(lon, lat, alt)
+      const dot = viewer.entities.getById(`wp-dot-${uid}`)
+      const lbl = viewer.entities.getById(`wp-lbl-${uid}`)
+      if (dot) dot.position = new Cesium.ConstantPositionProperty(newPos)
+      if (lbl) lbl.position = new Cesium.ConstantPositionProperty(newPos)
+
+      // 수직 stick 이동
+      const stick = viewer.entities.getById(`wp-stick-${uid}`)
+      if (stick?.polyline) {
+        stick.polyline.positions = new Cesium.ConstantProperty([
+          Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+          Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+        ])
+      }
+
+      // 경로 polyline 전체 갱신
+      const path = viewer.entities.getById('wp-path')
+      if (path?.polyline) {
+        const positions = waypointsRef.current
+          .filter((w) => HAS_ALT[w.action])
+          .map((w) =>
+            w.uid === uid
+              ? Cesium.Cartesian3.fromDegrees(lon, lat, alt)
+              : Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.alt)
+          )
+        path.polyline.positions = new Cesium.ConstantProperty(positions)
+      }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
+
+    // ── LEFT_UP: 드래그 끝 → 위치 확정 ─────────────────────────────────────
+    handler.setInputAction(() => {
+      setCameraEnabled(viewer, true)
+      viewer.canvas.style.cursor = 'default'
+      if (!dragStateRef.current) return
+      const { uid } = dragStateRef.current
+      const moved   = dragMovedRef.current
+      const pos     = lastDragPosRef.current
+
+      dragStateRef.current   = null
+      dragMovedRef.current   = false
+      lastDragPosRef.current = null
+
+      if (moved && pos) {
+        justDraggedRef.current = true
+        setTimeout(() => { justDraggedRef.current = false }, 50)
+        onMoveWaypointRef.current?.(
+          uid,
+          parseFloat(pos.lat.toFixed(7)),
+          parseFloat(pos.lon.toFixed(7))
+        )
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_UP)
+
+    // ── LEFT_CLICK: 선택 / 웨이포인트 추가 ──────────────────────────────────
+    handler.setInputAction((click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+      // 드래그 직후에는 클릭 무시 (드래그 끝 좌표에서 오탐 방지)
+      if (justDraggedRef.current) return
+
+      const picked = viewer.scene.pick(click.position)
+      if (Cesium.defined(picked) && picked.id instanceof Cesium.Entity) {
+        const uid = parseWpUid(picked.id.id)
+        if (uid !== null) {
+          onSelectWaypointRef.current?.(uid)
+        }
+        return
+      }
+
+      // 빈 지형 클릭 → 웨이포인트 추가
+      const ray = viewer.camera.getPickRay(click.position)
+      if (!ray) return
+      const cartesian = viewer.scene.globe.pick(ray, viewer.scene)
+      if (!cartesian) return
+
+      const carto = Cesium.Cartographic.fromCartesian(cartesian)
+      const lat = parseFloat(Cesium.Math.toDegrees(carto.latitude).toFixed(7))
+      const lon = parseFloat(Cesium.Math.toDegrees(carto.longitude).toFixed(7))
+      onAddWaypointRef.current?.(lat, lon)
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+
+    return () => {
+      handler.destroy()
+      if (viewerRef.current) setCameraEnabled(viewerRef.current, true)
+    }
+  }, []) // 한 번만 실행 — 최신 값은 모두 ref로 접근
+
   // ── Render waypoint entities ──────────────────────────────────────────────
   useEffect(() => {
     const viewer = viewerRef.current
@@ -202,36 +382,27 @@ function MissionCesiumMap({ initialCenter, waypoints }, ref) {
             Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 0),
             Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, wp.alt),
           ]),
-          width:    1,
-          material: new Cesium.ColorMaterialProperty(cesiumColor.withAlpha(0.35)),
+          width:    2.5,
+          material: new Cesium.ColorMaterialProperty(cesiumColor.withAlpha(0.5)),
           clampToGround: false,
         },
       })
       wpEntityIdsRef.current.push(stickId)
 
-      // Dot marker at altitude
+      // Dot marker at altitude — 2D Leaflet 스타일 캔버스 아이콘
       const dotId = `wp-dot-${wp.uid}`
+      const isSelected = selectedUid === wp.uid
       viewer.entities.add({
         id:       dotId,
         position: Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, wp.alt),
-        point: {
-          pixelSize:   16,
-          color:       cesiumColor.withAlpha(0.9),
-          outlineColor: Cesium.Color.fromCssColorString('#181C14'),
-          outlineWidth: 2,
+        billboard: {
+          image:                    createWaypointIcon(seq, colorHex, isSelected),
+          width:                    40,
+          height:                   40,
           heightReference:           Cesium.HeightReference.NONE,
           disableDepthTestDistance:  Number.POSITIVE_INFINITY,
-        },
-        label: {
-          text:             String(seq),
-          font:             "bold 11px 'JetBrains Mono', monospace",
-          fillColor:        Cesium.Color.fromCssColorString('#181C14'),
-          style:            Cesium.LabelStyle.FILL,
-          verticalOrigin:   Cesium.VerticalOrigin.CENTER,
-          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-          pixelOffset:      new Cesium.Cartesian2(0, 0),
-          heightReference:           Cesium.HeightReference.NONE,
-          disableDepthTestDistance:  Number.POSITIVE_INFINITY,
+          verticalOrigin:            Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin:          Cesium.HorizontalOrigin.CENTER,
         },
       })
       wpEntityIdsRef.current.push(dotId)
@@ -267,9 +438,9 @@ function MissionCesiumMap({ initialCenter, waypoints }, ref) {
           positions: new Cesium.ConstantProperty(
             navWps.map((wp) => Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, wp.alt))
           ),
-          width:    2,
+          width:    3,
           material: new Cesium.PolylineDashMaterialProperty({
-            color:     Cesium.Color.fromCssColorString('#4FC3F7').withAlpha(0.6),
+            color:     Cesium.Color.fromCssColorString('#4FC3F7').withAlpha(0.75),
             dashLength: 16,
           }),
           clampToGround: false,
@@ -277,7 +448,7 @@ function MissionCesiumMap({ initialCenter, waypoints }, ref) {
       })
       wpEntityIdsRef.current.push(pathId)
     }
-  }, [waypoints])
+  }, [waypoints, selectedUid]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Expose camera state to parent for 3D→2D zoom sync ───────────────────
   useImperativeHandle(ref, () => ({
@@ -311,12 +482,12 @@ function MissionCesiumMap({ initialCenter, waypoints }, ref) {
   )
 })
 
-// ─── Canvas-based drone icon (Fix: SVG negative viewBox breaks Cesium) ────────
+// ─── Drone icon using user-supplied drone_icon.png + heading line ─────────────
 function createDroneIcon(heading: number): string {
   const K = 4
   const canvas = document.createElement('canvas')
-  canvas.width  = 96  * K
-  canvas.height = 112 * K
+  canvas.width  = 96  * K  // 384
+  canvas.height = 112 * K  // 448
   const ctx = canvas.getContext('2d')!
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   ctx.scale(K, K)
@@ -326,91 +497,61 @@ function createDroneIcon(heading: number): string {
   ctx.rotate((heading * Math.PI) / 180)
   ctx.translate(-48, -64)
 
-  // Drop shadow
-  ctx.save(); ctx.globalAlpha = 0.22; ctx.filter = 'blur(4px)'; ctx.translate(3, 4)
-  ctx.beginPath(); ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 82)
-  ctx.lineTo(48, 69); ctx.lineTo(91, 82); ctx.lineTo(92, 76); ctx.closePath()
-  ctx.fillStyle = '#000000'; ctx.fill(); ctx.restore()
+  // Heading indicator line
+  ctx.beginPath(); ctx.moveTo(48, 1); ctx.lineTo(48, 15)
+  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke()
 
-  // Heading line glow
-  ctx.save(); ctx.globalAlpha = 0.30
-  ctx.beginPath(); ctx.moveTo(48, 2); ctx.lineTo(48, 36)
-  ctx.strokeStyle = '#FFB060'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke(); ctx.restore()
-  // Heading line core
-  ctx.beginPath(); ctx.moveTo(48, 2); ctx.lineTo(48, 36)
-  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke()
-
-  // Wing shadow
-  ctx.save(); ctx.globalAlpha = 0.28
-  ctx.beginPath(); ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 82)
-  ctx.lineTo(48, 69); ctx.lineTo(91, 82); ctx.lineTo(92, 76); ctx.closePath()
-  ctx.fillStyle = '#000000'; ctx.fill(); ctx.restore()
-
-  // Wings
-  const wg = ctx.createLinearGradient(48, 54, 48, 82)
-  wg.addColorStop(0, '#FFFFFF'); wg.addColorStop(0.45, '#E8EBF2'); wg.addColorStop(1, '#B8BDD0')
-  ctx.beginPath(); ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 81)
-  ctx.lineTo(48, 69); ctx.lineTo(91, 81); ctx.lineTo(92, 76); ctx.closePath()
-  ctx.fillStyle = wg; ctx.fill()
-  // Leading edge accent
-  ctx.save(); ctx.globalAlpha = 0.55
-  ctx.beginPath(); ctx.moveTo(48, 58); ctx.lineTo(4, 76); ctx.lineTo(5, 78); ctx.lineTo(48, 60); ctx.closePath()
-  ctx.fillStyle = '#00CFFF'; ctx.fill()
-  ctx.beginPath(); ctx.moveTo(48, 58); ctx.lineTo(92, 76); ctx.lineTo(91, 78); ctx.lineTo(48, 60); ctx.closePath()
-  ctx.fillStyle = '#00CFFF'; ctx.fill(); ctx.restore()
-
-  // Fuselage
-  const fg = ctx.createLinearGradient(42, 46, 54, 90)
-  fg.addColorStop(0, '#D0D8F0'); fg.addColorStop(0.2, '#FFFFFF')
-  fg.addColorStop(0.8, '#FFFFFF'); fg.addColorStop(1, '#C8CEDF')
-  ctx.beginPath(); ctx.ellipse(48, 68, 4.5, 22, 0, 0, Math.PI * 2)
-  ctx.fillStyle = fg; ctx.fill()
-  ctx.save(); ctx.globalAlpha = 0.42
-  ctx.beginPath(); ctx.ellipse(47, 63, 1.8, 12, -0.15, 0, Math.PI * 2)
-  ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore()
-
-  // Canards
-  ctx.save(); ctx.globalAlpha = 0.82
-  ctx.beginPath(); ctx.moveTo(48, 47); ctx.lineTo(32, 53); ctx.lineTo(32, 56)
-  ctx.lineTo(48, 50); ctx.lineTo(64, 56); ctx.lineTo(64, 53); ctx.closePath()
-  ctx.fillStyle = '#DCE6F8'; ctx.fill(); ctx.restore()
-
-  // Tail fins
-  ctx.save(); ctx.globalAlpha = 0.70
-  ctx.beginPath(); ctx.moveTo(43, 87); ctx.lineTo(35, 100); ctx.lineTo(38, 101); ctx.lineTo(46, 89); ctx.closePath()
-  ctx.fillStyle = '#CDD5E6'; ctx.fill()
-  ctx.beginPath(); ctx.moveTo(53, 87); ctx.lineTo(61, 100); ctx.lineTo(58, 101); ctx.lineTo(50, 89); ctx.closePath()
-  ctx.fillStyle = '#CDD5E6'; ctx.fill(); ctx.restore()
-
-  // Wing rotor pods
-  for (const [px, py] of [[7, 77], [89, 77]] as [number, number][]) {
-    const pg = ctx.createRadialGradient(px - 2, py - 1.5, 0.5, px, py, 5.5)
-    pg.addColorStop(0, '#4A5878'); pg.addColorStop(0.65, '#1a1a2a'); pg.addColorStop(1, '#07070E')
-    ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI * 2)
-    ctx.fillStyle = pg; ctx.fill()
-    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.5; ctx.stroke()
+  // Drone image (96×96, starts at y=16)
+  if (_droneImg.complete && _droneImg.naturalWidth > 0) {
+    ctx.drawImage(_droneImg, 0, 16, 96, 96)
   }
 
-  // Center engine
-  ctx.save(); ctx.globalAlpha = 0.20
-  ctx.beginPath(); ctx.arc(48, 68, 9, 0, Math.PI * 2)
-  ctx.fillStyle = '#00CFFF'; ctx.fill(); ctx.restore()
-  const eg = ctx.createRadialGradient(46, 66, 0.5, 48, 68, 7)
-  eg.addColorStop(0, '#3C4468'); eg.addColorStop(0.75, '#1a1a2a'); eg.addColorStop(1, '#07070E')
-  ctx.beginPath(); ctx.arc(48, 68, 7, 0, Math.PI * 2)
-  ctx.fillStyle = eg; ctx.fill()
-  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.8; ctx.stroke()
-  const cg = ctx.createRadialGradient(47.5, 67.5, 0, 48, 68, 3)
-  cg.addColorStop(0, '#CCFFFF'); cg.addColorStop(0.5, '#00CFFF'); cg.addColorStop(1, '#0077AA')
-  ctx.beginPath(); ctx.arc(48, 68, 3, 0, Math.PI * 2)
-  ctx.fillStyle = cg; ctx.fill()
-
-  // Nose
-  const ng = ctx.createRadialGradient(47.5, 44, 0.3, 48, 45, 3.5)
-  ng.addColorStop(0, '#CCFFFF'); ng.addColorStop(0.55, '#00CFFF'); ng.addColorStop(1, '#0077AA')
-  ctx.beginPath(); ctx.ellipse(48, 45, 3, 3.5, 0, 0, Math.PI * 2)
-  ctx.fillStyle = ng; ctx.fill()
-
   ctx.restore()
+  return canvas.toDataURL('image/png')
+}
+
+// ─── Canvas waypoint icon (2D Leaflet 스타일과 동일) ─────────────────────────
+function createWaypointIcon(seq: number, colorHex: string, isSelected: boolean): string {
+  const SIZE = 40
+  const K    = 2  // retina
+  const canvas = document.createElement('canvas')
+  canvas.width  = SIZE * K
+  canvas.height = SIZE * K
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(K, K)
+
+  const cx = SIZE / 2
+  const cy = SIZE / 2
+  const r  = 13
+
+  // 선택 시 외부 흰 링
+  if (isSelected) {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r + 5, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+
+  // 어두운 아웃라인 (위성 배경 대비)
+  ctx.beginPath()
+  ctx.arc(cx, cy, r + 1, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)'
+  ctx.lineWidth = 3
+  ctx.stroke()
+
+  // 솔리드 컬러 fill
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fillStyle = colorHex + 'DD'  // ~87% opacity
+  ctx.fill()
+
+  // 순서 번호 (어두운 색 — 밝은 배경 대비)
+  ctx.fillStyle = '#181C14'
+  ctx.font = "bold 11px 'JetBrains Mono', monospace"
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(seq), cx, cy + 0.5)
+
   return canvas.toDataURL('image/png')
 }
