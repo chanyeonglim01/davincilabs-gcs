@@ -3,10 +3,19 @@ import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import type { Waypoint } from '@renderer/store/missionStore'
-import droneIconUrl from '@renderer/assets/drone_icon.svg'
-
-const _droneImg = new Image()
-_droneImg.src = droneIconUrl
+import {
+  DRONE_MODEL_URI,
+  DRONE_MODEL_SCALE,
+  DRONE_MIN_PIXEL_SIZE,
+  DRONE_MAX_SCALE,
+  computeDroneOrientation,
+  patchModelDepth,
+  HEADING_STICK_IMAGE,
+  STICK_WIDTH_PX,
+  STICK_LENGTH_PX,
+  STICK_NOSE_PX,
+  STICK_SCREEN_Y_OFFSET_PX,
+} from './cesiumDroneModel'
 
 const DEFAULT_LON = 126.978
 const DEFAULT_LAT = 37.5665
@@ -52,8 +61,13 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
 function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint, onSelectWaypoint, onMoveWaypoint }, ref) {
   const containerRef    = useRef<HTMLDivElement>(null)
   const viewerRef       = useRef<Cesium.Viewer | null>(null)
-  const droneEntityRef  = useRef<Cesium.Entity | null>(null)
-  const wpEntityIdsRef  = useRef<string[]>([])
+  const droneEntityRef      = useRef<Cesium.Entity | null>(null)
+  const headingEntityRef    = useRef<Cesium.Entity | null>(null)
+  const wpEntityIdsRef      = useRef<string[]>([])
+  const headingDegRef       = useRef<number>(0)
+  const billboardPosRef     = useRef<Cesium.Cartesian3>(Cesium.Cartesian3.ZERO)
+  const billboardRotRef     = useRef<number>(0)
+  const billboardOffRef     = useRef<Cesium.Cartesian2>(new Cesium.Cartesian2(0, 0))
   // initialCenter provided = user switched from 2D → keep that position, skip auto-fly
   const hasFlownRef     = useRef<boolean>(initialCenter != null)
 
@@ -81,6 +95,8 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
   // ── Init Cesium viewer ───────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return
+
+    let removeDepthPatch: (() => void) | undefined
 
     try {
       Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZjE2MmRhMi0wMzRiLTQ4MGItYTE0Yi01NTk3ZWY2Yjg3MWUiLCJpZCI6MzkxOTkyLCJpYXQiOjE3NzE1MDkwODh9.pf3-Gjw9bfY1-GhlCdCdB_Khnvl094ULGmdhk7109A0'
@@ -137,19 +153,66 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
       })
 
       viewer.scene.globe.enableLighting = false
+      viewer.scene.globe.depthTestAgainstTerrain = false
       viewerRef.current = viewer
 
-      // Drone entity
+      const initPos = Cesium.Cartesian3.fromDegrees(initLon, initLat, 0)
+      billboardPosRef.current = initPos
+
       droneEntityRef.current = viewer.entities.add({
         name: 'Drone',
-        position: Cesium.Cartesian3.fromDegrees(initLon, initLat, 0),
-        billboard: {
-          image:                    createDroneIcon(0),
-          width:                    128,
-          height:                   184,
-          heightReference:          Cesium.HeightReference.RELATIVE_TO_GROUND,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        position: initPos,
+        orientation: new Cesium.ConstantProperty(
+          computeDroneOrientation(initPos, 0, 0, 0)
+        ),
+        model: {
+          uri: DRONE_MODEL_URI,
+          scale: DRONE_MODEL_SCALE,
+          minimumPixelSize: DRONE_MIN_PIXEL_SIZE,
+          maximumScale: DRONE_MAX_SCALE,
+          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+          silhouetteColor: Cesium.Color.fromCssColorString('#ECDFCC'),
+          silhouetteSize: 1.0,
+          shadows: Cesium.ShadowMode.DISABLED,
         },
+      })
+
+      // 헤딩 표시: billboard + disableDepthTestDistance=Infinity (건물에 가리지 않음)
+      headingEntityRef.current = viewer.entities.add({
+        position: new Cesium.CallbackProperty(
+          () => billboardPosRef.current, false
+        ) as unknown as Cesium.PositionProperty,
+        billboard: {
+          image: HEADING_STICK_IMAGE,
+          width: STICK_WIDTH_PX,
+          height: STICK_LENGTH_PX,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          rotation: new Cesium.CallbackProperty(() => billboardRotRef.current, false),
+          pixelOffset: new Cesium.CallbackProperty(() => billboardOffRef.current, false),
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        },
+      })
+
+      // postUpdate: depth patch + heading billboard 갱신
+      removeDepthPatch = viewer.scene.postUpdate.addEventListener(() => {
+        if (droneEntityRef.current) {
+          patchModelDepth(viewer.scene, droneEntityRef.current)
+        }
+        if (droneEntityRef.current) {
+          const dronePos = droneEntityRef.current.position?.getValue(viewer.clock.currentTime)
+          if (dronePos) {
+            // RELATIVE_TO_GROUND 사용으로 수동 terrain 보정 불필요 — Cesium이 모델과 동일하게 보정
+            billboardPosRef.current = dronePos
+            const droneHeadingRad = Cesium.Math.toRadians(headingDegRef.current)
+            const screenAngle = droneHeadingRad - viewer.camera.heading
+            const midpointPx = STICK_NOSE_PX + STICK_LENGTH_PX / 2
+            billboardRotRef.current = viewer.camera.heading - droneHeadingRad
+            billboardOffRef.current.x = midpointPx * Math.sin(screenAngle)
+            billboardOffRef.current.y = -midpointPx * Math.cos(screenAngle) + STICK_SCREEN_Y_OFFSET_PX
+          }
+        }
       })
 
       setTimeout(() => {
@@ -162,6 +225,7 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
     }
 
     return () => {
+      removeDepthPatch?.()
       viewerRef.current?.destroy()
       viewerRef.current = null
     }
@@ -176,15 +240,16 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
     const { lat, lon, relative_alt } = telemetry.position
     const heading = telemetry.heading
 
-    if (entity.billboard) {
-      entity.billboard.image = new Cesium.ConstantProperty(createDroneIcon(heading))
-    }
-
     if (lat === 0 && lon === 0) return
 
-    entity.position = new Cesium.ConstantPositionProperty(
-      Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
+    headingDegRef.current = heading
+
+    const position = Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
+    entity.position = new Cesium.ConstantPositionProperty(position)
+    entity.orientation = new Cesium.ConstantProperty(
+      computeDroneOrientation(position, heading, telemetry.attitude.pitch, telemetry.attitude.roll)
     )
+    // heading stick은 postUpdate에서 매 프레임 갱신
 
     if (!hasFlownRef.current) {
       hasFlownRef.current = true
@@ -530,51 +595,6 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
     <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
   )
 })
-
-// ─── Drone icon using drone_icon.svg + heading line ─────────────────────────
-const _ICON_W = 128
-const _ICON_H = 184
-const _DRONE_Y = 50
-const _DRONE_H = 83  // 128 / (1011/659)
-
-function createDroneIcon(heading: number): string {
-  const K = 4
-  const ICON_W = _ICON_W
-  const ICON_H = _ICON_H
-  const DRONE_Y = _DRONE_Y
-  const DRONE_H = _DRONE_H
-  const canvas = document.createElement('canvas')
-  canvas.width  = ICON_W * K
-  canvas.height = ICON_H * K
-  const ctx = canvas.getContext('2d')!
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.scale(K, K)
-
-  const cx = 64
-  const cy = 92  // DRONE_Y + DRONE_H/2 = 50 + 41.5
-
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate((heading * Math.PI) / 180)
-  ctx.translate(-cx, -cy)
-
-  // Heading indicator (기체 앞쪽으로 뻗음)
-  ctx.save()
-  ctx.globalAlpha = 0.35
-  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
-  ctx.strokeStyle = '#FFB060'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke()
-  ctx.restore()
-  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
-  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke()
-
-  // Drone SVG
-  if (_droneImg.complete && _droneImg.naturalWidth > 0) {
-    ctx.drawImage(_droneImg, 0, DRONE_Y, ICON_W, DRONE_H)
-  }
-
-  ctx.restore()
-  return canvas.toDataURL('image/png')
-}
 
 // ─── Canvas waypoint icon (2D Leaflet 스타일과 동일) ─────────────────────────
 function createWaypointIcon(seq: number, colorHex: string, isSelected: boolean): string {

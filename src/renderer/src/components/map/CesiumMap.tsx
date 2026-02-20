@@ -2,11 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
-import droneIconUrl from '@renderer/assets/drone_icon.svg'
-
-// Preload drone image at module init
-const _droneImg = new Image()
-_droneImg.src = droneIconUrl
+import {
+  DRONE_MODEL_URI,
+  DRONE_MODEL_SCALE,
+  DRONE_MIN_PIXEL_SIZE,
+  DRONE_MAX_SCALE,
+  computeDroneOrientation,
+  patchModelDepth,
+  HEADING_STICK_IMAGE,
+  STICK_WIDTH_PX,
+  STICK_LENGTH_PX,
+  STICK_NOSE_PX,
+  STICK_SCREEN_Y_OFFSET_PX,
+} from './cesiumDroneModel'
 
 const DEFAULT_LON = 126.978
 const DEFAULT_LAT = 37.5665
@@ -19,17 +27,22 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const entityRef = useRef<Cesium.Entity | null>(null)
+  const headingEntityRef = useRef<Cesium.Entity | null>(null)
   const hasFlownRef = useRef(false)
+  const headingDegRef = useRef<number>(0)
+  const billboardPosRef = useRef<Cesium.Cartesian3>(Cesium.Cartesian3.ZERO)
+  const billboardRotRef = useRef<number>(0)
+  const billboardOffRef = useRef<Cesium.Cartesian2>(new Cesium.Cartesian2(0, 0))
   const [error, setError] = useState<string | null>(null)
 
   const telemetry = useTelemetryStore((state) => state.telemetry)
   const history = useTelemetryStore((state) => state.history)
 
-  // Initialize Cesium Viewer
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return
 
     const container = containerRef.current
+    let removeDepthPatch: (() => void) | undefined
 
     try {
       Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZjE2MmRhMi0wMzRiLTQ4MGItYTE0Yi01NTk3ZWY2Yjg3MWUiLCJpZCI6MzkxOTkyLCJpYXQiOjE3NzE1MDkwODh9.pf3-Gjw9bfY1-GhlCdCdB_Khnvl094ULGmdhk7109A0'
@@ -57,21 +70,20 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         )
       })
 
-      // Cesium World Terrain (실제 지형 고도)
       Cesium.CesiumTerrainProvider.fromIonAssetId(1, { requestVertexNormals: false }).then((terrain) => {
         if (viewerRef.current) viewerRef.current.terrainProvider = terrain
-      }).catch(() => {/* 실패 시 flat 유지 */})
+      }).catch(() => {})
 
       // OSM Buildings (3D 건물)
       Cesium.Cesium3DTileset.fromIonAssetId(96188).then((tileset) => {
         if (viewerRef.current) viewerRef.current.scene.primitives.add(tileset)
-      }).catch(() => {/* 실패 시 무시 */})
+      }).catch(() => {})
 
-      // Sync camera with Leaflet map position when switching from 2D
+      viewer.scene.globe.depthTestAgainstTerrain = false
+
       const initLon = initialCenter?.lon ?? DEFAULT_LON
       const initLat = initialCenter?.lat ?? DEFAULT_LAT
       const initZoom = initialCenter?.zoom ?? 15
-      // Leaflet zoom → Cesium altitude (zoom15 ≈ 2500m, tuned to match Leaflet FOV at typical GCS window)
       const initAlt = Math.max(500, 2500 * Math.pow(2, 15 - initZoom))
 
       viewer.camera.setView({
@@ -86,17 +98,25 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
       viewer.scene.globe.enableLighting = false
       viewerRef.current = viewer
 
-      // Add default drone entity (same position as camera center, label hidden until real telemetry)
+      const initPos = Cesium.Cartesian3.fromDegrees(initLon, initLat, 0)
+      billboardPosRef.current = initPos
+
+      // 3D GLB 드론 모델 엔티티
       entityRef.current = viewer.entities.add({
         name: 'Drone',
-        position: Cesium.Cartesian3.fromDegrees(initLon, initLat, 0),
-        billboard: {
-          image: createDroneIcon(0),
-          width: ICON_W,
-          height: ICON_H,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          // Always render on top of terrain and OSM 3D buildings
-          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        position: initPos,
+        orientation: new Cesium.ConstantProperty(
+          computeDroneOrientation(initPos, 0, 0, 0)
+        ),
+        model: {
+          uri: DRONE_MODEL_URI,
+          scale: DRONE_MODEL_SCALE,
+          minimumPixelSize: DRONE_MIN_PIXEL_SIZE,
+          maximumScale: DRONE_MAX_SCALE,
+          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+          silhouetteColor: Cesium.Color.fromCssColorString('#ECDFCC'),
+          silhouetteSize: 1.0,
+          shadows: Cesium.ShadowMode.DISABLED,
         },
         label: {
           show: false,
@@ -112,7 +132,43 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         }
       })
 
-      // Force layout recalculation and render
+      // 헤딩 표시: billboard + disableDepthTestDistance=Infinity (건물에 가리지 않음)
+      headingEntityRef.current = viewer.entities.add({
+        position: new Cesium.CallbackProperty(
+          () => billboardPosRef.current, false
+        ) as unknown as Cesium.PositionProperty,
+        billboard: {
+          image: HEADING_STICK_IMAGE,
+          width: STICK_WIDTH_PX,
+          height: STICK_LENGTH_PX,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          rotation: new Cesium.CallbackProperty(() => billboardRotRef.current, false),
+          pixelOffset: new Cesium.CallbackProperty(() => billboardOffRef.current, false),
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        },
+      })
+
+      // postUpdate: depth patch + heading billboard 갱신
+      removeDepthPatch = viewer.scene.postUpdate.addEventListener(() => {
+        if (entityRef.current) {
+          patchModelDepth(viewer.scene, entityRef.current)
+        }
+        if (entityRef.current) {
+          const dronePos = entityRef.current.position?.getValue(viewer.clock.currentTime)
+          if (dronePos) {
+            billboardPosRef.current = dronePos
+            const droneHeadingRad = Cesium.Math.toRadians(headingDegRef.current)
+            const screenAngle = droneHeadingRad - viewer.camera.heading
+            const midpointPx = STICK_NOSE_PX + STICK_LENGTH_PX / 2
+            billboardRotRef.current = viewer.camera.heading - droneHeadingRad
+            billboardOffRef.current.x = midpointPx * Math.sin(screenAngle)
+            billboardOffRef.current.y = -midpointPx * Math.cos(screenAngle) + STICK_SCREEN_Y_OFFSET_PX
+          }
+        }
+      })
+
       setTimeout(() => {
         viewer.forceResize()
         viewer.scene.requestRender()
@@ -125,10 +181,9 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     }
 
     return () => {
-      if (viewerRef.current) {
-        viewerRef.current.destroy()
-        viewerRef.current = null
-      }
+      removeDepthPatch?.()
+      viewerRef.current?.destroy()
+      viewerRef.current = null
     }
   }, [])
 
@@ -139,30 +194,20 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     const { lat, lon, relative_alt } = telemetry.position
     const heading = telemetry.heading
 
-    // Always update icon heading
-    if (entityRef.current.billboard) {
-      entityRef.current.billboard.image = new Cesium.ConstantProperty(createDroneIcon(heading))
-    }
-
     if (lat === 0 && lon === 0) return
 
-    // Update position
+    headingDegRef.current = heading
+
     const position = Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
     entityRef.current.position = new Cesium.ConstantPositionProperty(position)
-    if (entityRef.current.billboard) {
-      entityRef.current.billboard.heightReference = new Cesium.ConstantProperty(
-        Cesium.HeightReference.RELATIVE_TO_GROUND
-      )
-      entityRef.current.billboard.width = new Cesium.ConstantProperty(ICON_W)
-      entityRef.current.billboard.height = new Cesium.ConstantProperty(ICON_H)
-      entityRef.current.billboard.disableDepthTestDistance = new Cesium.ConstantProperty(Number.POSITIVE_INFINITY)
-    }
+    entityRef.current.orientation = new Cesium.ConstantProperty(
+      computeDroneOrientation(position, heading, telemetry.attitude.pitch, telemetry.attitude.roll)
+    )
     if (entityRef.current.label) {
       entityRef.current.label.show = new Cesium.ConstantProperty(true)
       entityRef.current.label.text = new Cesium.ConstantProperty(`ALT: ${relative_alt.toFixed(0)}m`)
     }
 
-    // Fly camera to drone on first real telemetry
     if (!hasFlownRef.current) {
       hasFlownRef.current = true
       viewerRef.current.camera.flyTo({
@@ -232,47 +277,4 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
     </div>
   )
-}
-
-// DRONE_Y=50: heading line y=2→48 (46px, 앞쪽으로 뻗음), drone y=50→133
-// body center=91.5≈92, ICON_H=184 → center=92 → 2D/3D anchor 일치
-const ICON_W = 128
-const ICON_H = 184
-const DRONE_Y = 50
-const DRONE_H = 83   // 128 / (1011/659)
-
-function createDroneIcon(heading: number): string {
-  const K = 4
-  const canvas = document.createElement('canvas')
-  canvas.width  = ICON_W * K
-  canvas.height = ICON_H * K
-  const ctx = canvas.getContext('2d')!
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.scale(K, K)
-
-  // Rotation pivot = drone body center = icon center
-  const cx = 64
-  const cy = 92
-
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate((heading * Math.PI) / 180)
-  ctx.translate(-cx, -cy)
-
-  // Heading indicator: glow + core line (기체 앞쪽, y=2→48)
-  ctx.save()
-  ctx.globalAlpha = 0.35
-  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
-  ctx.strokeStyle = '#FFB060'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke()
-  ctx.restore()
-  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, DRONE_Y - 2)
-  ctx.strokeStyle = '#E87020'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke()
-
-  // Drone SVG
-  if (_droneImg.complete && _droneImg.naturalWidth > 0) {
-    ctx.drawImage(_droneImg, 0, DRONE_Y, ICON_W, DRONE_H)
-  }
-
-  ctx.restore()
-  return canvas.toDataURL('image/png')
 }
