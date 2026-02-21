@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { useMissionStore } from '@renderer/store/missionStore'
+import type { ActionKey } from '@renderer/store/missionStore'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import {
@@ -9,15 +11,56 @@ import {
   DRONE_MAX_SCALE,
   computeDroneOrientation,
   patchModelDepth,
-  HEADING_STICK_IMAGE,
-  STICK_WIDTH_PX,
-  STICK_LENGTH_PX,
-  STICK_NOSE_PX,
-  STICK_SCREEN_Y_OFFSET_PX,
 } from './cesiumDroneModel'
 
 const DEFAULT_LON = 126.978
 const DEFAULT_LAT = 37.5665
+
+const MISSION_POLYLINE_ID = 'mission-polyline'
+const MISSION_MARKER_PREFIX = 'mission-wp-'
+const MISSION_STICK_PREFIX = 'mission-stick-'
+
+const CESIUM_ACTION_COLORS: Record<ActionKey, string> = {
+  VTOL_TAKEOFF: '#A5D6A7',
+  VTOL_TRANSITION_FW: '#FFB74D',
+  VTOL_TRANSITION_MC: '#FFB74D',
+  VTOL_LAND: '#E87020',
+  MC_TAKEOFF: '#80CBC4',
+  MC_LAND: '#80CBC4',
+  FW_TAKEOFF: '#CE93D8',
+  FW_LAND: '#CE93D8',
+  WAYPOINT: '#4FC3F7',
+  LOITER: '#B39DDB',
+  RTL: '#FF8A80'
+}
+
+function createWaypointBillboard(seq: number, color: string): string {
+  const size = 48
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+
+  // Circle fill
+  ctx.beginPath()
+  ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2)
+  ctx.fillStyle = color
+  ctx.fill()
+
+  // Border
+  ctx.lineWidth = 3
+  ctx.strokeStyle = 'rgba(24,28,20,0.8)'
+  ctx.stroke()
+
+  // Number text
+  ctx.fillStyle = '#181C14'
+  ctx.font = "bold 18px 'JetBrains Mono', monospace"
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(seq + 1), size / 2, size / 2)
+
+  return canvas.toDataURL('image/png')
+}
 
 interface CesiumMapProps {
   initialCenter?: { lon: number; lat: number; zoom: number } | null
@@ -27,16 +70,14 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Cesium.Viewer | null>(null)
   const entityRef = useRef<Cesium.Entity | null>(null)
-  const headingEntityRef = useRef<Cesium.Entity | null>(null)
   const hasFlownRef = useRef(false)
-  const headingDegRef = useRef<number>(0)
-  const billboardPosRef = useRef<Cesium.Cartesian3>(Cesium.Cartesian3.ZERO)
-  const billboardRotRef = useRef<number>(0)
-  const billboardOffRef = useRef<Cesium.Cartesian2>(new Cesium.Cartesian2(0, 0))
+  const prevHeadingRef = useRef<number | null>(null)
+  const accHeadingRef = useRef(0)
   const [error, setError] = useState<string | null>(null)
 
   const telemetry = useTelemetryStore((state) => state.telemetry)
   const history = useTelemetryStore((state) => state.history)
+  const waypoints = useMissionStore((state) => state.waypoints)
 
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return
@@ -99,7 +140,6 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
       viewerRef.current = viewer
 
       const initPos = Cesium.Cartesian3.fromDegrees(initLon, initLat, 0)
-      billboardPosRef.current = initPos
 
       // 3D GLB 드론 모델 엔티티
       entityRef.current = viewer.entities.add({
@@ -132,40 +172,10 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         }
       })
 
-      // 헤딩 표시: billboard + disableDepthTestDistance=Infinity (건물에 가리지 않음)
-      headingEntityRef.current = viewer.entities.add({
-        position: new Cesium.CallbackProperty(
-          () => billboardPosRef.current, false
-        ) as unknown as Cesium.PositionProperty,
-        billboard: {
-          image: HEADING_STICK_IMAGE,
-          width: STICK_WIDTH_PX,
-          height: STICK_LENGTH_PX,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          rotation: new Cesium.CallbackProperty(() => billboardRotRef.current, false),
-          pixelOffset: new Cesium.CallbackProperty(() => billboardOffRef.current, false),
-          verticalOrigin: Cesium.VerticalOrigin.CENTER,
-          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-        },
-      })
-
-      // postUpdate: depth patch + heading billboard 갱신
+      // postUpdate: depth patch
       removeDepthPatch = viewer.scene.postUpdate.addEventListener(() => {
         if (entityRef.current) {
           patchModelDepth(viewer.scene, entityRef.current)
-        }
-        if (entityRef.current) {
-          const dronePos = entityRef.current.position?.getValue(viewer.clock.currentTime)
-          if (dronePos) {
-            billboardPosRef.current = dronePos
-            const droneHeadingRad = Cesium.Math.toRadians(headingDegRef.current)
-            const screenAngle = droneHeadingRad - viewer.camera.heading
-            const midpointPx = STICK_NOSE_PX + STICK_LENGTH_PX / 2
-            billboardRotRef.current = viewer.camera.heading - droneHeadingRad
-            billboardOffRef.current.x = midpointPx * Math.sin(screenAngle)
-            billboardOffRef.current.y = -midpointPx * Math.cos(screenAngle) + STICK_SCREEN_Y_OFFSET_PX
-          }
         }
       })
 
@@ -196,12 +206,21 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
 
     if (lat === 0 && lon === 0) return
 
-    headingDegRef.current = heading
-
+    // Heading unwrap — shortest-path delta 누적
+    if (prevHeadingRef.current === null) {
+      prevHeadingRef.current = heading
+      accHeadingRef.current = heading
+    } else {
+      let delta = heading - prevHeadingRef.current
+      if (delta > 180) delta -= 360
+      if (delta < -180) delta += 360
+      prevHeadingRef.current = heading
+      accHeadingRef.current += delta
+    }
     const position = Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
     entityRef.current.position = new Cesium.ConstantPositionProperty(position)
     entityRef.current.orientation = new Cesium.ConstantProperty(
-      computeDroneOrientation(position, heading, telemetry.attitude.pitch, telemetry.attitude.roll)
+      computeDroneOrientation(position, accHeadingRef.current, telemetry.attitude.pitch, telemetry.attitude.roll)
     )
     if (entityRef.current.label) {
       entityRef.current.label.show = new Cesium.ConstantProperty(true)
@@ -252,6 +271,101 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
       })
     }
   }, [history])
+
+  // Mission waypoint overlay
+  useEffect(() => {
+    if (!viewerRef.current) return
+
+    const viewer = viewerRef.current
+
+    // Remove existing mission entities
+    const oldPolyline = viewer.entities.getById(MISSION_POLYLINE_ID)
+    if (oldPolyline) viewer.entities.remove(oldPolyline)
+
+    // Remove existing waypoint markers and altitude sticks
+    const toRemove: Cesium.Entity[] = []
+    viewer.entities.values.forEach((e) => {
+      if (e.id?.startsWith(MISSION_MARKER_PREFIX) || e.id?.startsWith(MISSION_STICK_PREFIX)) toRemove.push(e)
+    })
+    toRemove.forEach((e) => viewer.entities.remove(e))
+
+    if (waypoints.length === 0) return
+
+    // Filter waypoints with valid coordinates for polyline
+    const navPoints = waypoints.filter((w) => !(w.lat === 0 && w.lon === 0))
+
+    // Draw mission polyline if 2+ navigable points
+    if (navPoints.length >= 2) {
+      const positions = navPoints.map((w) =>
+        Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.alt)
+      )
+      viewer.entities.add({
+        id: MISSION_POLYLINE_ID,
+        name: 'Mission Path',
+        polyline: {
+          positions,
+          width: 3,
+          material: new Cesium.PolylineDashMaterialProperty({
+            color: Cesium.Color.fromCssColorString('rgba(79,195,247,0.75)'),
+            dashLength: 16
+          }),
+          clampToGround: false
+        }
+      })
+    }
+
+    // Create waypoint markers + altitude sticks
+    waypoints.forEach((wp, seq) => {
+      const color = CESIUM_ACTION_COLORS[wp.action]
+      const hasPosition = !(wp.lat === 0 && wp.lon === 0)
+
+      // Altitude stick: ground → waypoint altitude
+      if (hasPosition && wp.alt > 0) {
+        viewer.entities.add({
+          id: `${MISSION_STICK_PREFIX}${seq}`,
+          polyline: {
+            positions: [
+              Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, 0),
+              Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, wp.alt)
+            ],
+            width: 1.5,
+            material: new Cesium.ColorMaterialProperty(
+              Cesium.Color.fromCssColorString(color).withAlpha(0.5)
+            ),
+            clampToGround: false
+          }
+        })
+      }
+
+      viewer.entities.add({
+        id: `${MISSION_MARKER_PREFIX}${seq}`,
+        name: `WP ${seq + 1}`,
+        position: Cesium.Cartesian3.fromDegrees(wp.lon, wp.lat, wp.alt),
+        billboard: {
+          image: createWaypointBillboard(seq, color),
+          width: 24,
+          height: 24,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          heightReference: Cesium.HeightReference.NONE
+        },
+        label: hasPosition ? {
+          text: `${wp.alt}m`,
+          font: "10px 'JetBrains Mono', monospace",
+          fillColor: Cesium.Color.fromCssColorString(color),
+          outlineColor: Cesium.Color.fromCssColorString('#181C14'),
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          pixelOffset: new Cesium.Cartesian2(0, -16),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          heightReference: Cesium.HeightReference.NONE
+        } : undefined
+      })
+    })
+  }, [waypoints])
 
   if (error) {
     return (

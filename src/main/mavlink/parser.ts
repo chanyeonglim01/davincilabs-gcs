@@ -117,37 +117,46 @@ export class MavlinkParser extends EventEmitter {
   private parsePacket(packet: Buffer): void {
     const msgid = packet.readUInt8(7) | (packet.readUInt8(8) << 8) | (packet.readUInt8(9) << 16)
 
+    // MAVLink v2 allows trailing zero bytes to be truncated from the payload.
+    // Rebuild with zero-padded payload so fixed-offset reads are correct.
+    // (Appending zeros to the END of the packet is wrong — CRC sits right
+    //  after the truncated payload, so fixed offsets would read CRC bytes.)
+    const payloadLen = packet[1]
+    const paddedPayload = Buffer.alloc(40) // covers all msg types we handle
+    packet.copy(paddedPayload, 0, 10, 10 + payloadLen)
+    const safe = Buffer.concat([packet.subarray(0, 10), paddedPayload])
+
     // Simple dispatch based on msgid
     switch (msgid) {
       case 0: // HEARTBEAT
-        this.handleHeartbeat(packet)
+        this.handleHeartbeat(safe)
         break
       case 30: // ATTITUDE
-        this.handleAttitude(packet)
+        this.handleAttitude(safe)
         break
       case 33: // GLOBAL_POSITION_INT
-        this.handleGlobalPositionInt(packet)
+        this.handleGlobalPositionInt(safe)
         break
       case 74: // VFR_HUD
-        this.handleVfrHud(packet)
+        this.handleVfrHud(safe)
         break
       case 1: // SYS_STATUS
-        this.handleSysStatus(packet)
+        this.handleSysStatus(safe)
         break
       case 22: // PARAM_VALUE
-        this.handleParamValue(packet)
+        this.handleParamValue(safe)
         break
       case 77: // COMMAND_ACK
-        this.handleCommandAck(packet)
+        this.handleCommandAck(safe)
         break
       case 40: // MISSION_REQUEST (legacy, used by some autopilots)
-        this.emit('missionRequest', packet.readUInt16LE(10))
+        this.emit('missionRequest', safe.readUInt16LE(10))
         break
       case 51: // MISSION_REQUEST_INT (PX4 preferred)
-        this.emit('missionRequest', packet.readUInt16LE(10))
+        this.emit('missionRequest', safe.readUInt16LE(10))
         break
       case 47: // MISSION_ACK
-        this.emit('missionAck', packet.readUInt8(12))
+        this.emit('missionAck', safe.readUInt8(12))
         break
       default:
       // console.log(`[MAVLink Parser] Unhandled msgid: ${msgid}`)
@@ -220,7 +229,10 @@ export class MavlinkParser extends EventEmitter {
       vz: vz / 100
     }
 
-    this.telemetryState.heading = hdg / 100
+    // hdg=65535 means "unknown" in MAVLink — skip to avoid 655° spike
+    if (hdg !== 65535) {
+      this.telemetryState.heading = hdg / 100
+    }
 
     // Set home position on first valid GPS fix
     if (!this.homePositionSet && lat !== 0 && lon !== 0 && lat !== -1 && lon !== -1) {

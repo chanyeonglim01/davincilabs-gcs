@@ -10,11 +10,6 @@ import {
   DRONE_MAX_SCALE,
   computeDroneOrientation,
   patchModelDepth,
-  HEADING_STICK_IMAGE,
-  STICK_WIDTH_PX,
-  STICK_LENGTH_PX,
-  STICK_NOSE_PX,
-  STICK_SCREEN_Y_OFFSET_PX,
 } from './cesiumDroneModel'
 
 const DEFAULT_LON = 126.978
@@ -62,14 +57,11 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
   const containerRef    = useRef<HTMLDivElement>(null)
   const viewerRef       = useRef<Cesium.Viewer | null>(null)
   const droneEntityRef      = useRef<Cesium.Entity | null>(null)
-  const headingEntityRef    = useRef<Cesium.Entity | null>(null)
   const wpEntityIdsRef      = useRef<string[]>([])
-  const headingDegRef       = useRef<number>(0)
-  const billboardPosRef     = useRef<Cesium.Cartesian3>(Cesium.Cartesian3.ZERO)
-  const billboardRotRef     = useRef<number>(0)
-  const billboardOffRef     = useRef<Cesium.Cartesian2>(new Cesium.Cartesian2(0, 0))
   // initialCenter provided = user switched from 2D → keep that position, skip auto-fly
   const hasFlownRef     = useRef<boolean>(initialCenter != null)
+  const prevHeadingRef  = useRef<number | null>(null)
+  const accHeadingRef   = useRef(0)
 
   // Callback refs — always point to latest prop without re-subscribing the handler
   const onAddWaypointRef    = useRef(onAddWaypoint)
@@ -157,7 +149,6 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
       viewerRef.current = viewer
 
       const initPos = Cesium.Cartesian3.fromDegrees(initLon, initLat, 0)
-      billboardPosRef.current = initPos
 
       droneEntityRef.current = viewer.entities.add({
         name: 'Drone',
@@ -177,41 +168,10 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
         },
       })
 
-      // 헤딩 표시: billboard + disableDepthTestDistance=Infinity (건물에 가리지 않음)
-      headingEntityRef.current = viewer.entities.add({
-        position: new Cesium.CallbackProperty(
-          () => billboardPosRef.current, false
-        ) as unknown as Cesium.PositionProperty,
-        billboard: {
-          image: HEADING_STICK_IMAGE,
-          width: STICK_WIDTH_PX,
-          height: STICK_LENGTH_PX,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          rotation: new Cesium.CallbackProperty(() => billboardRotRef.current, false),
-          pixelOffset: new Cesium.CallbackProperty(() => billboardOffRef.current, false),
-          verticalOrigin: Cesium.VerticalOrigin.CENTER,
-          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-        },
-      })
-
-      // postUpdate: depth patch + heading billboard 갱신
+      // postUpdate: depth patch
       removeDepthPatch = viewer.scene.postUpdate.addEventListener(() => {
         if (droneEntityRef.current) {
           patchModelDepth(viewer.scene, droneEntityRef.current)
-        }
-        if (droneEntityRef.current) {
-          const dronePos = droneEntityRef.current.position?.getValue(viewer.clock.currentTime)
-          if (dronePos) {
-            // RELATIVE_TO_GROUND 사용으로 수동 terrain 보정 불필요 — Cesium이 모델과 동일하게 보정
-            billboardPosRef.current = dronePos
-            const droneHeadingRad = Cesium.Math.toRadians(headingDegRef.current)
-            const screenAngle = droneHeadingRad - viewer.camera.heading
-            const midpointPx = STICK_NOSE_PX + STICK_LENGTH_PX / 2
-            billboardRotRef.current = viewer.camera.heading - droneHeadingRad
-            billboardOffRef.current.x = midpointPx * Math.sin(screenAngle)
-            billboardOffRef.current.y = -midpointPx * Math.cos(screenAngle) + STICK_SCREEN_Y_OFFSET_PX
-          }
         }
       })
 
@@ -242,14 +202,23 @@ function MissionCesiumMap({ initialCenter, waypoints, selectedUid, onAddWaypoint
 
     if (lat === 0 && lon === 0) return
 
-    headingDegRef.current = heading
+    // Heading unwrap — shortest-path delta 누적
+    if (prevHeadingRef.current === null) {
+      prevHeadingRef.current = heading
+      accHeadingRef.current = heading
+    } else {
+      let delta = heading - prevHeadingRef.current
+      if (delta > 180) delta -= 360
+      if (delta < -180) delta += 360
+      prevHeadingRef.current = heading
+      accHeadingRef.current += delta
+    }
 
     const position = Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
     entity.position = new Cesium.ConstantPositionProperty(position)
     entity.orientation = new Cesium.ConstantProperty(
-      computeDroneOrientation(position, heading, telemetry.attitude.pitch, telemetry.attitude.roll)
+      computeDroneOrientation(position, accHeadingRef.current, telemetry.attitude.pitch, telemetry.attitude.roll)
     )
-    // heading stick은 postUpdate에서 매 프레임 갱신
 
     if (!hasFlownRef.current) {
       hasFlownRef.current = true

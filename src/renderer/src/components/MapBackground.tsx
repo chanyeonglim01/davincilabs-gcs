@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { useMissionStore } from '@renderer/store/missionStore'
+import type { ActionKey } from '@renderer/store/missionStore'
 import droneIconSvg from '@renderer/assets/drone_icon.svg'
 
 const CesiumMap = lazy(() =>
@@ -37,6 +39,20 @@ const TILES: Record<string, { url: string; maxZoom: number; subdomains?: string 
   }
 }
 
+const ACTION_COLORS: Record<ActionKey, string> = {
+  VTOL_TAKEOFF: '#A5D6A7',
+  VTOL_TRANSITION_FW: '#FFB74D',
+  VTOL_TRANSITION_MC: '#FFB74D',
+  VTOL_LAND: '#E87020',
+  MC_TAKEOFF: '#80CBC4',
+  MC_LAND: '#80CBC4',
+  FW_TAKEOFF: '#CE93D8',
+  FW_LAND: '#CE93D8',
+  WAYPOINT: '#4FC3F7',
+  LOITER: '#B39DDB',
+  RTL: '#FF8A80'
+}
+
 type TileMode = 'dark' | 'satellite'
 type MapMode = '2d' | '3d'
 
@@ -45,10 +61,22 @@ export function MapBackground() {
   const mapInstanceRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
+
+  // Heading unwrap — delta 누적, 애니메이션 없음 (즉시 반영)
+  const prevHeadingRef = useRef<number | null>(null)
+  const accHeadingRef  = useRef(0)
   const [tileMode, setTileMode] = useState<TileMode>('satellite')
   const [mapMode, setMapMode] = useState<MapMode>('2d')
   const [cesiumCenter, setCesiumCenter] = useState<{ lon: number; lat: number; zoom: number } | null>(null)
-  const { telemetry } = useTelemetryStore()
+  const { telemetry, history } = useTelemetryStore()
+  const { waypoints } = useMissionStore()
+
+  // Mission overlay refs
+  const missionPolylineRef = useRef<L.Polyline | null>(null)
+  const missionMarkersRef = useRef<L.Marker[]>([])
+
+  // Drone trail ref
+  const droneTrailRef = useRef<L.Polyline | null>(null)
 
   // Initialize map
   useEffect(() => {
@@ -98,14 +126,132 @@ export function MapBackground() {
     }
   }, [mapMode])
 
-  // Update marker position + heading rotation
-  useEffect(() => {
+  // Update marker position + heading (즉시 반영, 애니메이션 없음)
+  useLayoutEffect(() => {
     if (!telemetry || !markerRef.current) return
     const { lat, lon } = telemetry.position
     if (lat === 0 && lon === 0) return
     markerRef.current.setLatLng([lat, lon])
-    markerRef.current.setIcon(createDroneIcon(telemetry.heading ?? 0))
+
+    const raw = telemetry.heading ?? 0
+    const el = markerRef.current.getElement()
+    const rotDiv = el?.firstElementChild as HTMLElement | null
+
+    // 첫 텔레메트리
+    if (prevHeadingRef.current === null) {
+      prevHeadingRef.current = raw
+      accHeadingRef.current = raw
+      if (rotDiv) {
+        rotDiv.style.transition = 'none'  // HMR에서 잔여 transition 제거
+        rotDiv.style.transform = `rotate(${raw}deg)`
+      }
+      return
+    }
+
+    // 최단 경로 delta
+    const prev = prevHeadingRef.current
+    let delta = raw - prev
+    if (delta > 180) delta -= 360
+    if (delta < -180) delta += 360
+
+    prevHeadingRef.current = raw
+    accHeadingRef.current += delta
+
+    if (rotDiv) {
+      rotDiv.style.transition = 'none'
+      rotDiv.style.transform = `rotate(${accHeadingRef.current}deg)`
+    }
   }, [telemetry?.position?.lat, telemetry?.position?.lon, telemetry?.heading])
+
+  // Mission waypoint overlay
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map) return
+
+    // Clean up existing overlay
+    if (missionPolylineRef.current) {
+      missionPolylineRef.current.remove()
+      missionPolylineRef.current = null
+    }
+    missionMarkersRef.current.forEach((m) => m.remove())
+    missionMarkersRef.current = []
+
+    if (waypoints.length === 0) return
+
+    // Filter waypoints with valid coordinates for polyline
+    const navPoints = waypoints.filter((w) => !(w.lat === 0 && w.lon === 0))
+
+    // Draw polyline if 2+ navigable points
+    if (navPoints.length >= 2) {
+      const coords: L.LatLngExpression[] = navPoints.map((w) => [w.lat, w.lon])
+      missionPolylineRef.current = L.polyline(coords, {
+        color: 'rgba(79,195,247,0.75)',
+        weight: 3,
+        dashArray: '8 5',
+        interactive: false
+      }).addTo(map)
+    }
+
+    // Create markers for all waypoints
+    const markers: L.Marker[] = waypoints.map((wp, seq) => {
+      const color = ACTION_COLORS[wp.action]
+      const icon = L.divIcon({
+        html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid rgba(24,28,20,0.8);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:#181C14;">${seq + 1}</div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        className: ''
+      })
+      return L.marker([wp.lat, wp.lon], { icon, interactive: false }).addTo(map)
+    })
+    missionMarkersRef.current = markers
+
+    return () => {
+      if (missionPolylineRef.current) {
+        missionPolylineRef.current.remove()
+        missionPolylineRef.current = null
+      }
+      missionMarkersRef.current.forEach((m) => m.remove())
+      missionMarkersRef.current = []
+    }
+  }, [waypoints])
+
+  // Drone trail (recent flight path)
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map) return
+
+    // Clean up existing trail
+    if (droneTrailRef.current) {
+      droneTrailRef.current.remove()
+      droneTrailRef.current = null
+    }
+
+    // Use last 150 points
+    const recent = history.slice(-150)
+    const validPoints = recent.filter(
+      (p) => p.position.lat !== 0 || p.position.lon !== 0
+    )
+
+    if (validPoints.length < 2) return
+
+    const coords: L.LatLngExpression[] = validPoints.map((p) => [
+      p.position.lat,
+      p.position.lon
+    ])
+
+    droneTrailRef.current = L.polyline(coords, {
+      color: 'rgba(236,223,204,0.35)',
+      weight: 2,
+      interactive: false
+    }).addTo(map)
+
+    return () => {
+      if (droneTrailRef.current) {
+        droneTrailRef.current.remove()
+        droneTrailRef.current = null
+      }
+    }
+  }, [history])
 
   const btnStyle = (active: boolean) => ({
     fontFamily: "'Space Grotesk', sans-serif",

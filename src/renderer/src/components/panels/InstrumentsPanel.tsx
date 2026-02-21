@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import { AirspeedIndicator } from './AirspeedIndicator'
 import { AltimeterIndicator } from './AltimeterIndicator'
@@ -179,11 +180,28 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
   )
 }
 
+// heading: raw 0-360° value. Unwrap computed during render, applied via JSX style.
 function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }) {
+  const rawHeading = ((heading % 360) + 360) % 360  // 0-360 for digital display
   const cx = size / 2
   const cy = size / 2
   const r = size * 0.42
   const id = `hdg-${size}`
+
+  // Heading unwrap — shortest-path delta 누적
+  const prevHdgRef = useRef<number | null>(null)
+  const accRef = useRef(0)
+
+  if (prevHdgRef.current === null) {
+    prevHdgRef.current = heading
+    accRef.current = heading
+  } else if (heading !== prevHdgRef.current) {
+    let delta = heading - prevHdgRef.current
+    if (delta > 180) delta -= 360
+    if (delta < -180) delta += 360
+    prevHdgRef.current = heading
+    accRef.current += delta
+  }
 
   // Cardinal + intercardinal labels
   const cardinals = [
@@ -226,7 +244,7 @@ function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }
 
       {/* Rotating compass card */}
       <g clipPath={`url(#${id}-clip)`}>
-        <g transform={`rotate(${-heading}, ${cx}, ${cy})`}>
+        <g style={{ transform: `rotate(${-accRef.current}deg)`, transformOrigin: `${cx}px ${cy}px`, transition: 'none' }}>
           {/* Ticks */}
           {ticks.map((deg) => {
             const isMajor = deg % 90 === 0
@@ -294,7 +312,7 @@ function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }
         fontFamily="JetBrains Mono, monospace"
         letterSpacing="-0.02em"
       >
-        {Math.round(heading).toString().padStart(3, '0')}°
+        {Math.round(rawHeading).toString().padStart(3, '0')}°
       </text>
     </svg>
   )
