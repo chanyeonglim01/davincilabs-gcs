@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import droneIconSvg from '@renderer/assets/drone_icon.svg'
@@ -8,6 +8,9 @@ import {
 } from 'recharts'
 import { useMissionStore, ActionKey, Waypoint } from '@renderer/store/missionStore'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { DesignToolbar } from './mission/DesignToolbar'
+import { SurveyConfigPanel } from './mission/SurveyConfigPanel'
+import { generateSurveyGrid, SurveyGridParams, SurveyGridResult } from '@renderer/lib/surveyGrid'
 
 import type { MissionCesiumMapHandle } from './map/MissionCesiumMap'
 
@@ -181,7 +184,7 @@ const mapBtnStyle = (active: boolean): React.CSSProperties => ({
 
 // ─── MissionView ───────────────────────────────────────────────────────────────
 export function MissionView() {
-  const { waypoints, defaultAlt, setWaypoints, setDefaultAlt, nextUid, clearMission } = useMissionStore()
+  const { waypoints, defaultAlt, setWaypoints, setDefaultAlt, nextUid, clearMission, designMode, setDesignMode } = useMissionStore()
   const { telemetry } = useTelemetryStore()
 
   const mapContainerRef  = useRef<HTMLDivElement>(null)
@@ -199,6 +202,29 @@ export function MissionView() {
   const [mapMode, setMapMode]          = useState<MapMode>('2d')
   const [tileMode, setTileMode]        = useState<TileMode>('satellite')
   const [cesiumCenter, setCesiumCenter] = useState<{ lon: number; lat: number; zoom: number } | null>(null)
+
+  // ── Design toolbar state ──────────────────────────────────────────────────────
+  const [toolbarExpanded, setToolbarExpanded] = useState(false)
+
+  // ── Survey polygon state ──────────────────────────────────────────────────────
+  const [surveyVertices, setSurveyVertices] = useState<[number, number][]>([])
+  const [surveyPolygonClosed, setSurveyPolygonClosed] = useState(false)
+  const [showSurveyConfig, setShowSurveyConfig] = useState(false)
+  const [surveyParams, setSurveyParams] = useState<SurveyGridParams>({
+    spacing: 50, angle: 0, altitude: defaultAlt, overshoot: 0,
+  })
+  const [surveyPreviewResult, setSurveyPreviewResult] = useState<SurveyGridResult | null>(null)
+
+  // ── Heading unwrap — delta 누적, 애니메이션 없음 ─────────────────────────────
+  const prevHeadingRef = useRef<number | null>(null)
+  const accHeadingRef  = useRef(0)
+
+  // ── Survey Leaflet refs ───────────────────────────────────────────────────────
+  const surveyPolygonRef      = useRef<L.Polygon | null>(null)
+  const surveyEdgeRef         = useRef<L.Polyline | null>(null)
+  const surveyVertexMarkersRef = useRef<L.Marker[]>([])
+  const surveyPreviewLineRef  = useRef<L.Polyline | null>(null)
+  const surveyPreviewDotsRef  = useRef<L.Marker[]>([])
 
   // ── Drag-to-reorder state ─────────────────────────────────────────────────────
   const dragUidRef = useRef<number | null>(null)
@@ -224,7 +250,16 @@ export function MissionView() {
 
     map.on('click', (e: L.LeafletMouseEvent) => {
       const store = useMissionStore.getState()
-      const uid   = store.nextUid()
+      if (store.designMode === 'survey-polygon') {
+        // Dispatch to survey vertex handler via custom event
+        const evt = new CustomEvent('survey-vertex-add', {
+          detail: { lat: e.latlng.lat, lon: e.latlng.lng },
+        })
+        window.dispatchEvent(evt)
+        return
+      }
+      // Default: add waypoint
+      const uid = store.nextUid()
       store.setWaypoints((prev) => [
         ...prev,
         {
@@ -286,7 +321,7 @@ export function MissionView() {
       seq++
 
       const marker = L.marker([wp.lat, wp.lon], {
-        icon: L.divIcon({ html: markerHtml(seq, def, tileMode === 'satellite'), iconSize: [32, 32], iconAnchor: [16, 16], className: '' }),
+        icon: L.divIcon({ html: markerHtml(seq, def, true), iconSize: [32, 32], iconAnchor: [16, 16], className: '' }),
         draggable: true,
       })
 
@@ -316,8 +351,8 @@ export function MissionView() {
     }
   }, [waypoints, tileMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Drone marker: update position + heading from telemetry ───────────────────
-  useEffect(() => {
+  // ── Drone marker: update position + heading (즉시 반영) ─────────────────────
+  useLayoutEffect(() => {
     const map    = mapRef.current
     const marker = droneMarkerRef.current
     if (!map || !marker || !telemetry) return
@@ -325,15 +360,40 @@ export function MissionView() {
     const { lat, lon } = telemetry.position
     if (lat === 0 && lon === 0) return
 
-    const latlng = new L.LatLng(lat, lon)
+    marker.setLatLng(new L.LatLng(lat, lon))
 
-    marker.setLatLng(latlng)
-    marker.setIcon(createDroneIcon(telemetry.heading ?? 0))
+    const raw = telemetry.heading ?? 0
+    const el = marker.getElement()
+    const rotDiv = el?.firstElementChild as HTMLElement | null
 
-    // First valid GPS fix → auto-center map on drone
+    if (prevHeadingRef.current === null) {
+      prevHeadingRef.current = raw
+      accHeadingRef.current = raw
+      if (rotDiv) {
+        rotDiv.style.transition = 'none'
+        rotDiv.style.transform = `rotate(${raw}deg)`
+      }
+      if (!hasCenteredRef.current) {
+        hasCenteredRef.current = true
+        map.setView(new L.LatLng(lat, lon), Math.max(map.getZoom(), 16))
+      }
+      return
+    }
+
+    let delta = raw - prevHeadingRef.current
+    if (delta > 180) delta -= 360
+    if (delta < -180) delta += 360
+    prevHeadingRef.current = raw
+    accHeadingRef.current += delta
+
+    if (rotDiv) {
+      rotDiv.style.transition = 'none'
+      rotDiv.style.transform = `rotate(${accHeadingRef.current}deg)`
+    }
+
     if (!hasCenteredRef.current) {
       hasCenteredRef.current = true
-      map.setView(latlng, Math.max(map.getZoom(), 16))
+      map.setView(new L.LatLng(lat, lon), Math.max(map.getZoom(), 16))
     }
   }, [telemetry?.position?.lat, telemetry?.position?.lon, telemetry?.heading]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -343,6 +403,192 @@ export function MissionView() {
     const { lat, lon } = telemetry.position
     if (lat === 0 && lon === 0) return
     map.setView(new L.LatLng(lat, lon), Math.max(map.getZoom(), 16))
+  }
+
+  // ── Survey vertex listener ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { lat, lon } = (e as CustomEvent<{ lat: number; lon: number }>).detail
+
+      setSurveyVertices((prev) => {
+        // Check if clicking near first vertex to close polygon
+        if (prev.length >= 3) {
+          const first = prev[0]
+          const map = mapRef.current
+          if (map) {
+            const p1 = map.latLngToContainerPoint([first[0], first[1]])
+            const p2 = map.latLngToContainerPoint([lat, lon])
+            const dist = Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2)
+            if (dist < 20) {
+              // Close polygon
+              setSurveyPolygonClosed(true)
+              setShowSurveyConfig(true)
+              return prev
+            }
+          }
+        }
+        return [...prev, [lat, lon] as [number, number]]
+      })
+    }
+    window.addEventListener('survey-vertex-add', handler)
+    return () => window.removeEventListener('survey-vertex-add', handler)
+  }, [])
+
+  // ── Clear survey state when designMode leaves survey-polygon ─────────────────
+  useEffect(() => {
+    if (designMode !== 'survey-polygon') {
+      clearSurveyOverlays()
+      setSurveyVertices([])
+      setSurveyPolygonClosed(false)
+      setShowSurveyConfig(false)
+      setSurveyPreviewResult(null)
+    }
+  }, [designMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Render survey polygon on map ──────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || mapMode !== '2d') return
+
+    // Remove old vertex markers
+    surveyVertexMarkersRef.current.forEach((m) => m.remove())
+    surveyVertexMarkersRef.current = []
+    surveyEdgeRef.current?.remove()
+    surveyEdgeRef.current = null
+    surveyPolygonRef.current?.remove()
+    surveyPolygonRef.current = null
+
+    if (surveyVertices.length === 0) return
+
+    // Vertex markers — 32px DivIcon, yellow (#FFD740)
+    const VERTEX_COLOR = '#FFD740'
+    surveyVertices.forEach((v, i) => {
+      const isFirst = i === 0
+      const html = `
+        <div style="width:32px;height:32px;border-radius:50%;
+          background:${isFirst ? VERTEX_COLOR + 'EE' : VERTEX_COLOR + '33'};
+          border:2px solid ${VERTEX_COLOR};
+          display:flex;align-items:center;justify-content:center;
+          box-shadow:0 0 8px ${VERTEX_COLOR}66;cursor:crosshair;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
+            color:${isFirst ? '#181C14' : VERTEX_COLOR};line-height:1;">
+            ${i + 1}
+          </span>
+        </div>`
+      const marker = L.marker([v[0], v[1]], {
+        icon: L.divIcon({ html, iconSize: [32, 32], iconAnchor: [16, 16], className: '' }),
+        interactive: false,
+      }).addTo(map)
+      surveyVertexMarkersRef.current.push(marker)
+    })
+
+    if (surveyPolygonClosed) {
+      // Filled polygon
+      surveyPolygonRef.current = L.polygon(surveyVertices.map((v) => [v[0], v[1]] as L.LatLngTuple), {
+        color: '#FFD740',
+        fillColor: 'rgba(255,215,64,0.08)',
+        fillOpacity: 1,
+        weight: 1.5,
+        dashArray: '5 4',
+      }).addTo(map)
+    } else if (surveyVertices.length >= 2) {
+      // Edge polyline while drawing
+      surveyEdgeRef.current = L.polyline(surveyVertices.map((v) => [v[0], v[1]] as L.LatLngTuple), {
+        color: '#FFD740',
+        weight: 1.5,
+        dashArray: '5 4',
+        opacity: 0.7,
+      }).addTo(map)
+    }
+  }, [surveyVertices, surveyPolygonClosed, mapMode])
+
+  // ── Render survey preview path ────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || mapMode !== '2d') return
+
+    surveyPreviewLineRef.current?.remove()
+    surveyPreviewLineRef.current = null
+    surveyPreviewDotsRef.current.forEach((m) => m.remove())
+    surveyPreviewDotsRef.current = []
+
+    if (!surveyPreviewResult || surveyPreviewResult.waypoints.length === 0) return
+
+    const pts = surveyPreviewResult.waypoints.map(
+      (wp) => [wp.lat, wp.lon] as L.LatLngTuple
+    )
+    surveyPreviewLineRef.current = L.polyline(pts, {
+      color: 'rgba(79,195,247,0.6)',
+      weight: 1.5,
+      dashArray: '4 3',
+    }).addTo(map)
+
+    surveyPreviewResult.waypoints.forEach((wp, i) => {
+      const dot = L.marker([wp.lat, wp.lon], {
+        icon: L.divIcon({
+          html: markerHtml(i + 1, ACTIONS.WAYPOINT, tileMode === 'satellite'),
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+          className: '',
+        }),
+        interactive: false,
+      }).addTo(map)
+      surveyPreviewDotsRef.current.push(dot)
+    })
+  }, [surveyPreviewResult, mapMode])
+
+  // ── Survey overlay cleanup helper ─────────────────────────────────────────────
+  function clearSurveyOverlays() {
+    surveyVertexMarkersRef.current.forEach((m) => m.remove())
+    surveyVertexMarkersRef.current = []
+    surveyEdgeRef.current?.remove()
+    surveyEdgeRef.current = null
+    surveyPolygonRef.current?.remove()
+    surveyPolygonRef.current = null
+    surveyPreviewLineRef.current?.remove()
+    surveyPreviewLineRef.current = null
+    surveyPreviewDotsRef.current.forEach((m) => m.remove())
+    surveyPreviewDotsRef.current = []
+  }
+
+  // ── Survey handlers ───────────────────────────────────────────────────────────
+  const handleSurveyPreview = () => {
+    if (surveyVertices.length < 3) return
+    const result = generateSurveyGrid(surveyVertices, surveyParams)
+    setSurveyPreviewResult(result)
+  }
+
+  const handleSurveyApply = () => {
+    if (!surveyPreviewResult || surveyPreviewResult.waypoints.length === 0) return
+    const newWps: Waypoint[] = surveyPreviewResult.waypoints.map((wp) => {
+      const uid = useMissionStore.getState().nextUid()
+      return {
+        uid,
+        action: 'WAYPOINT' as ActionKey,
+        lat: wp.lat,
+        lon: wp.lon,
+        alt: surveyParams.altitude,
+        acceptRadius: 5,
+        loiterRadius: 50,
+      }
+    })
+    setWaypoints((prev) => [...prev, ...newWps])
+    // Reset all survey state
+    clearSurveyOverlays()
+    setSurveyVertices([])
+    setSurveyPolygonClosed(false)
+    setShowSurveyConfig(false)
+    setSurveyPreviewResult(null)
+    setDesignMode('none')
+  }
+
+  const handleSurveyCancel = () => {
+    clearSurveyOverlays()
+    setSurveyVertices([])
+    setSurveyPolygonClosed(false)
+    setShowSurveyConfig(false)
+    setSurveyPreviewResult(null)
+    setDesignMode('none')
   }
 
   // Restore Leaflet size when switching back to 2D
@@ -572,7 +818,7 @@ export function MissionView() {
         )}
 
         <button
-          onClick={() => { clearMission(); setUploadMsg(null) }}
+          onClick={() => { clearMission(); setUploadMsg(null); handleSurveyCancel() }}
           style={{
             fontFamily: mono, fontSize: '10px', fontWeight: 700,
             letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -601,6 +847,20 @@ export function MissionView() {
           {uploading ? 'UPLOADING…' : 'UPLOAD MISSION'}
         </button>
       </div>
+
+      {/* ── Design Toolbar ───────────────────────────────────────────────────── */}
+      <DesignToolbar
+        expanded={toolbarExpanded}
+        onToggle={() => setToolbarExpanded((v) => !v)}
+        designMode={designMode}
+        onSetMode={(mode) => {
+          setDesignMode(mode)
+          // When switching away from survey mid-draw, clear vertices
+          if (mode !== 'survey-polygon') {
+            handleSurveyCancel()
+          }
+        }}
+      />
 
       {/* ── Map + Panel ──────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -638,6 +898,18 @@ export function MissionView() {
                 />
               </div>
             </Suspense>
+          )}
+
+          {/* Survey Config Panel */}
+          {showSurveyConfig && (
+            <SurveyConfigPanel
+              params={surveyParams}
+              onParamChange={setSurveyParams}
+              previewResult={surveyPreviewResult}
+              onPreview={handleSurveyPreview}
+              onApply={handleSurveyApply}
+              onCancel={handleSurveyCancel}
+            />
           )}
 
           {/* Map mode toggle (bottom-right) */}

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 
 // ─── Types (shared with MissionView) ──────────────────────────────────────────
+export type DesignMode = 'none' | 'waypoint' | 'survey-polygon'
+
 export type ActionKey =
   | 'VTOL_TAKEOFF'
   | 'MC_TAKEOFF'
@@ -28,17 +30,20 @@ interface MissionStore {
   waypoints: Waypoint[]
   defaultAlt: number
   uidCounter: number
+  designMode: DesignMode
 
   setWaypoints: (wps: Waypoint[] | ((prev: Waypoint[]) => Waypoint[])) => void
   setDefaultAlt: (alt: number) => void
   nextUid: () => number
   clearMission: () => void
+  setDesignMode: (mode: DesignMode) => void
 }
 
 export const useMissionStore = create<MissionStore>((set, get) => ({
   waypoints: [],
   defaultAlt: 50,
   uidCounter: 1,
+  designMode: 'none',
 
   setWaypoints: (wps) =>
     set((state) => ({
@@ -53,5 +58,7 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     return uid
   },
 
-  clearMission: () => set({ waypoints: [], uidCounter: 1 }),
+  clearMission: () => set({ waypoints: [], uidCounter: 1, designMode: 'none' }),
+
+  setDesignMode: (mode) => set({ designMode: mode }),
 }))

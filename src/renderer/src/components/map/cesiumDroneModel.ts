@@ -6,48 +6,6 @@ export const DRONE_MIN_PIXEL_SIZE = 130        // 화면 고정 픽셀 크기 (�
 export const DRONE_MAX_SCALE = 500000          // minimumPixelSize 스케일 업 상한
 export const MODEL_HEADING_OFFSET_DEG = 180
 
-// ─── Heading stick billboard 상수 ─────────────────────────────────────────────
-export const STICK_WIDTH_PX  = 6
-export const STICK_LENGTH_PX = Math.round(DRONE_MIN_PIXEL_SIZE * 0.4)   // ~52px
-export const STICK_NOSE_PX   = Math.round(DRONE_MIN_PIXEL_SIZE * 0.42)  // ~55px
-export const STICK_SCREEN_Y_OFFSET_PX = 10  // 노즈 높이 보정 (양수=화면 아래)
-
-function createStickImage(): string {
-  const K = 2
-  const W = STICK_WIDTH_PX
-  const H = STICK_LENGTH_PX
-  const canvas = document.createElement('canvas')
-  canvas.width  = W * K
-  canvas.height = H * K
-  const ctx = canvas.getContext('2d')!
-  ctx.scale(K, K)
-
-  // Glow
-  ctx.beginPath()
-  ctx.moveTo(W / 2, 2)
-  ctx.lineTo(W / 2, H - 2)
-  ctx.globalAlpha = 0.35
-  ctx.strokeStyle = '#FFB060'
-  ctx.lineWidth = W + 4
-  ctx.lineCap = 'round'
-  ctx.stroke()
-
-  // Main line
-  ctx.globalAlpha = 1
-  ctx.beginPath()
-  ctx.moveTo(W / 2, 2)
-  ctx.lineTo(W / 2, H - 2)
-  ctx.strokeStyle = '#FFB060'
-  ctx.lineWidth = W - 1
-  ctx.lineCap = 'round'
-  ctx.stroke()
-
-  return canvas.toDataURL('image/png')
-}
-
-/** 모듈 로드 시 1회 생성 (renderer 컨텍스트 전용) */
-export const HEADING_STICK_IMAGE = createStickImage()
-
 export function computeDroneOrientation(
   position: Cesium.Cartesian3,
   headingDeg: number,
