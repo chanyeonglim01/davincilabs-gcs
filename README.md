@@ -137,7 +137,7 @@ davincilabs_GCS/
 
 ```bash
 # 미션 업로드 프로토콜 테스트 (드론 없이)
-node test/mission_simulator.mjs
+node tests/manual/mission_simulator.mjs
 # → 14551 listen, HEARTBEAT 1Hz 전송
 # → GCS에서 UPLOAD MISSION 시 프로토콜 처리 결과 출력
 ```

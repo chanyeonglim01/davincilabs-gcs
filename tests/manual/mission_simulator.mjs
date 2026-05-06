@@ -6,7 +6,7 @@
  *   Simulator (drone-side): listens on 14551, sends to GCS at 14550
  *   GCS (our app):          listens on 14550, sends to drone at 14551
  *
- * Run: node test/mission_simulator.mjs
+ * Run: node tests/manual/mission_simulator.mjs
  * Then use the GCS Mission view → UPLOAD MISSION button
  */
 
