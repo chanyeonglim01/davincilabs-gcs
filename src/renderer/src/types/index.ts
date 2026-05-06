@@ -28,6 +28,8 @@ export type {
   ConnectionMode,
   ConnectionConfig,
   ConnectionStatus,
+  LinkState,
+  SerialPortInfo,
   CommandType,
   Command,
   CommandParams,

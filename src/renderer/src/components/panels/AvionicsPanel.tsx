@@ -18,11 +18,19 @@ export function AvionicsPanel() {
   const [loading, setLoading] = useState(false)
 
   const handleConfirm = async () => {
-    if (!confirming || !window.mavlink) { setConfirming(null); return }
+    if (!confirming || !window.mavlink) {
+      setConfirming(null)
+      return
+    }
     setLoading(true)
-    try { await window.mavlink.sendCommand({ type: confirming.type, params: confirming.params }) }
-    catch (e) { console.error(e) }
-    finally { setLoading(false); setConfirming(null) }
+    try {
+      await window.mavlink.sendCommand({ type: confirming.type, params: confirming.params })
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+      setConfirming(null)
+    }
   }
   const { telemetry } = useTelemetryStore()
 
@@ -44,8 +52,8 @@ export function AvionicsPanel() {
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         padding: '14px 16px',
         width: '220px',
-      maxHeight: 'calc(100vh - 80px)',
-      overflowY: 'auto'
+        maxHeight: 'calc(100vh - 80px)',
+        overflowY: 'auto'
       }}
     >
       {/* ARM Status */}
@@ -146,14 +154,22 @@ export function AvionicsPanel() {
         {/* Mode selector buttons */}
         <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
           {(['MANUAL', 'AUTO', 'EMER'] as const).map((mode) => {
-            const modeMap: Record<string, string> = { MANUAL: 'MANUAL', AUTO: 'AUTO.MISSION', EMER: 'EMERGENCY' }
-            const isActive = flightMode === modeMap[mode] || (mode === 'AUTO' && flightMode.startsWith('AUTO'))
+            const modeMap: Record<string, string> = {
+              MANUAL: 'MANUAL',
+              AUTO: 'AUTO.MISSION',
+              EMER: 'EMERGENCY'
+            }
+            const activePrefix: Record<string, string> = {
+              MANUAL: 'MANUAL',
+              AUTO: 'AUTO',
+              EMER: 'EMERGENCY'
+            }
+            const isActive = flightMode.startsWith(activePrefix[mode])
             return (
               <button
                 key={mode}
                 onClick={() => {
-                  const targetMode = mode === 'EMER' ? 'STABILIZED' : modeMap[mode]
-                  window.mavlink?.sendCommand({ type: 'SET_MODE', params: { mode: targetMode } })
+                  window.mavlink?.sendCommand({ type: 'SET_MODE', params: { mode: modeMap[mode] } })
                 }}
                 style={{
                   flex: 1,
@@ -218,7 +234,15 @@ export function AvionicsPanel() {
           { label: 'PITCH', value: pitch },
           { label: 'YAW', value: yaw }
         ].map(({ label, value }) => (
-          <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
+          <div
+            key={label}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              minWidth: '60px'
+            }}
+          >
             <span
               style={{
                 fontFamily: "'Space Grotesk', sans-serif",
@@ -291,7 +315,8 @@ export function AvionicsPanel() {
                 if (!loading) {
                   ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(60,61,55,0.85)'
                   ;(e.currentTarget as HTMLButtonElement).style.color = '#ECDFCC'
-                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(236,223,204,0.45)'
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor =
+                    'rgba(236,223,204,0.45)'
                 }
               }}
               onMouseLeave={(e) => {
@@ -310,25 +335,90 @@ export function AvionicsPanel() {
       {confirming && (
         <div
           style={{
-            position: 'fixed', inset: 0, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', background: 'rgba(24,28,20,0.7)',
-            backdropFilter: 'blur(4px)', zIndex: 100
+            position: 'fixed',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(24,28,20,0.7)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 100
           }}
           onClick={() => !loading && setConfirming(null)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: '#1e2218', border: '1px solid rgba(236,223,204,0.2)',
-              borderRadius: '6px', padding: '12px 16px', width: '160px',
+              background: '#1e2218',
+              border: '1px solid rgba(236,223,204,0.2)',
+              borderRadius: '6px',
+              padding: '12px 16px',
+              width: '160px',
               boxShadow: '0 16px 48px rgba(0,0,0,0.6)'
             }}
           >
-            <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: '9px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(236,223,204,0.45)', marginBottom: '6px' }}>CONFIRM</div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '16px', fontWeight: 700, color: '#ECDFCC', marginBottom: '12px' }}>{confirming.label}</div>
+            <div
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: '9px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: 'rgba(236,223,204,0.45)',
+                marginBottom: '6px'
+              }}
+            >
+              CONFIRM
+            </div>
+            <div
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '16px',
+                fontWeight: 700,
+                color: '#ECDFCC',
+                marginBottom: '12px'
+              }}
+            >
+              {confirming.label}
+            </div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={() => setConfirming(null)} style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace", fontSize: '10px', fontWeight: 600, padding: '6px', border: '1px solid rgba(236,223,204,0.15)', borderRadius: '3px', background: 'transparent', color: 'rgba(236,223,204,0.5)', cursor: 'pointer', textTransform: 'uppercase' }}>CANCEL</button>
-              <button onClick={handleConfirm} disabled={loading} style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace", fontSize: '10px', fontWeight: 700, padding: '6px', border: '1px solid rgba(236,223,204,0.5)', borderRadius: '3px', background: 'rgba(236,223,204,0.08)', color: '#ECDFCC', cursor: loading ? 'not-allowed' : 'pointer', textTransform: 'uppercase' }}>{loading ? '...' : 'EXECUTE'}</button>
+              <button
+                onClick={() => setConfirming(null)}
+                style={{
+                  flex: 1,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  padding: '6px',
+                  border: '1px solid rgba(236,223,204,0.15)',
+                  borderRadius: '3px',
+                  background: 'transparent',
+                  color: 'rgba(236,223,204,0.5)',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase'
+                }}
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={loading}
+                style={{
+                  flex: 1,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  padding: '6px',
+                  border: '1px solid rgba(236,223,204,0.5)',
+                  borderRadius: '3px',
+                  background: 'rgba(236,223,204,0.08)',
+                  color: '#ECDFCC',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {loading ? '...' : 'EXECUTE'}
+              </button>
             </div>
           </div>
         </div>

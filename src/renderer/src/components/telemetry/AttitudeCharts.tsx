@@ -50,11 +50,7 @@ export function AttitudeCharts() {
             }}
             labelStyle={{ color: 'hsl(var(--foreground))' }}
           />
-          <Legend
-            wrapperStyle={{ fontSize: '12px' }}
-            iconType="line"
-            iconSize={16}
-          />
+          <Legend wrapperStyle={{ fontSize: '12px' }} iconType="line" iconSize={16} />
           <Line
             type="monotone"
             dataKey="roll"

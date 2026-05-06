@@ -23,6 +23,31 @@ import type { ParamEntry, CommandResult } from '../../../src/renderer/src/types/
  *   [10..10+payload_len-1] payload
  *   [10+payload_len, 10+payload_len+1] CRC (dummy 0x00 0x00)
  */
+// CRC_EXTRA for messages used in tests (must match parser.ts table)
+const CRC_EXTRA: Record<number, number> = {
+  0: 50, // HEARTBEAT
+  1: 124, // SYS_STATUS
+  22: 220, // PARAM_VALUE
+  30: 39, // ATTITUDE
+  33: 104, // GLOBAL_POSITION_INT
+  74: 20, // VFR_HUD
+  77: 143 // COMMAND_ACK
+}
+
+function calcCrc(data: Buffer, msgid: number): number {
+  const extra = CRC_EXTRA[msgid] ?? 0
+  let crc = 0xffff
+  for (let i = 0; i < data.length; i++) {
+    const tmp = data[i] ^ (crc & 0xff)
+    const ts = (tmp ^ (tmp << 4)) & 0xff
+    crc = ((crc >> 8) ^ (ts << 8) ^ (ts << 3) ^ (ts >> 4)) & 0xffff
+  }
+  const tmp = extra ^ (crc & 0xff)
+  const ts = (tmp ^ (tmp << 4)) & 0xff
+  crc = ((crc >> 8) ^ (ts << 8) ^ (ts << 3) ^ (ts >> 4)) & 0xffff
+  return crc
+}
+
 function buildPacket(msgid: number, payload: Buffer): Buffer {
   const headerLen = 10
   const crcLen = 2
@@ -39,7 +64,9 @@ function buildPacket(msgid: number, payload: Buffer): Buffer {
   buf.writeUInt8((msgid >> 8) & 0xff, 8)
   buf.writeUInt8((msgid >> 16) & 0xff, 9)
   payload.copy(buf, headerLen)
-  // CRC left as zeros (parser does not validate CRC)
+  // Compute CRC-16/MCRF4XX + CRC_EXTRA over [seq, sysid, compid, msgid, payload]
+  const crc = calcCrc(buf.subarray(1, headerLen + payload.length), msgid)
+  buf.writeUInt16LE(crc, headerLen + payload.length)
   return buf
 }
 

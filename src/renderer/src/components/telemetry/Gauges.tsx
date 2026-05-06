@@ -42,7 +42,10 @@ export function Gauges() {
       <h3 className="text-xs font-semibold text-gray-400 mb-3">TELEMETRY</h3>
       <div className="space-y-2">
         {gaugeItems.map((item) => (
-          <div key={item.label} className="flex justify-between items-center py-1 border-b border-gray-800">
+          <div
+            key={item.label}
+            className="flex justify-between items-center py-1 border-b border-gray-800"
+          >
             <span className="text-xs text-gray-500">{item.label}</span>
             <span className={`text-sm font-mono font-bold ${item.color}`}>{item.value}</span>
           </div>

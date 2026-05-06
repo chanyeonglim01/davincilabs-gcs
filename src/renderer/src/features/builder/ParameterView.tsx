@@ -31,7 +31,19 @@ interface ParamField {
   mavId?: string
 }
 
-type NodeCategory = 'airframe' | 'battery' | 'att' | 'rate' | 'pos' | 'vel' | 'limits'
+type NodeCategory =
+  | 'airframe'
+  | 'battery'
+  | 'att'
+  | 'rate'
+  | 'pos'
+  | 'vel'
+  | 'limits'
+  | 'surface'
+  | 'transition'
+  | 'lqr'
+  | 'mpc_ctrl'
+  | 'flight'
 
 interface ParamNodeData extends Record<string, unknown> {
   category: NodeCategory
@@ -45,21 +57,46 @@ type ParamNode = Node<ParamNodeData>
 
 // ─── Accent colors per category ───────────────────────────────────────────────
 const COLORS: Record<NodeCategory, string> = {
-  airframe: '#E87020',  // orange  — frame identity
-  battery:  '#ECDFCC',  // cream   — power
-  att:      '#FFB74D',  // amber   — attitude P loop
-  rate:     '#4FC3F7',  // sky     — rate PID loop
-  pos:      '#CE93D8',  // purple  — position P loop
-  vel:      '#80CBC4',  // teal    — velocity PID loop
-  limits:   '#A5D6A7',  // green   — safety bounds
+  airframe: '#E87020', // orange  — frame identity
+  battery: '#ECDFCC', // cream   — power
+  att: '#FFB74D', // amber   — attitude P loop
+  rate: '#4FC3F7', // sky     — rate PID loop
+  pos: '#CE93D8', // purple  — position P loop
+  vel: '#80CBC4', // teal    — velocity PID loop
+  limits: '#A5D6A7', // green   — safety bounds
+  surface: '#FF8A65', // coral   — control surfaces
+  transition: '#DCE775', // lime    — MC↔FW transition
+  lqr: '#F48FB1', // pink    — LQR control
+  mpc_ctrl: '#B39DDB', // lavender — MPC control
+  flight: '#90CAF9' // light blue — flight params
 }
 
 // ─── Handle visibility per category ──────────────────────────────────────────
 //   source-only: airframe, battery
 //   target-only: rate, limits
 //   both:        att, pos, vel
-const HAS_LEFT_HANDLE:  NodeCategory[] = ['att', 'rate', 'pos', 'vel', 'limits']
-const HAS_RIGHT_HANDLE: NodeCategory[] = ['airframe', 'battery', 'att', 'pos', 'vel']
+const HAS_LEFT_HANDLE: NodeCategory[] = [
+  'att',
+  'rate',
+  'pos',
+  'vel',
+  'limits',
+  'transition',
+  'lqr',
+  'mpc_ctrl',
+  'flight'
+]
+const HAS_RIGHT_HANDLE: NodeCategory[] = [
+  'airframe',
+  'battery',
+  'att',
+  'pos',
+  'vel',
+  'surface',
+  'transition',
+  'lqr',
+  'mpc_ctrl'
+]
 
 // ─── Custom Node Component ─────────────────────────────────────────────────────
 
@@ -89,11 +126,33 @@ function ParamNodeComponent({ data, selected }: NodeProps<ParamNode>) {
       }}
     >
       {/* Header */}
-      <div style={{ padding: '8px 12px 6px', background: `${accentColor}12`, borderBottom: `1px solid ${accentColor}28` }}>
-        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: accentColor, textTransform: 'uppercase' }}>
+      <div
+        style={{
+          padding: '8px 12px 6px',
+          background: `${accentColor}12`,
+          borderBottom: `1px solid ${accentColor}28`
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "'JetBrains Mono',monospace",
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            color: accentColor,
+            textTransform: 'uppercase'
+          }}
+        >
           {title}
         </div>
-        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: '9px', color: 'rgba(236,223,204,0.3)', marginTop: '1px' }}>
+        <div
+          style={{
+            fontFamily: "'Space Grotesk',sans-serif",
+            fontSize: '9px',
+            color: 'rgba(236,223,204,0.3)',
+            marginTop: '1px'
+          }}
+        >
           {subtitle}
         </div>
       </div>
@@ -101,18 +160,53 @@ function ParamNodeComponent({ data, selected }: NodeProps<ParamNode>) {
       {/* Fields preview */}
       <div style={{ padding: '8px 12px' }}>
         {(fields as ParamField[]).slice(0, 4).map((f) => (
-          <div key={f.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: '10px', color: 'rgba(236,223,204,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div
+            key={f.key}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '3px'
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "'Space Grotesk',sans-serif",
+                fontSize: '10px',
+                color: 'rgba(236,223,204,0.4)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}
+            >
               {f.label}
             </span>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', color: 'rgba(236,223,204,0.85)', background: 'rgba(60,61,55,0.5)', padding: '1px 6px', borderRadius: '3px' }}>
-              {typeof f.value === 'number' ? f.value.toFixed(f.step && f.step < 0.01 ? 4 : f.step && f.step < 0.1 ? 3 : 1) : f.value}
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono',monospace",
+                fontSize: '10px',
+                color: 'rgba(236,223,204,0.85)',
+                background: 'rgba(60,61,55,0.5)',
+                padding: '1px 6px',
+                borderRadius: '3px'
+              }}
+            >
+              {typeof f.value === 'number'
+                ? f.value.toFixed(f.step && f.step < 0.01 ? 4 : f.step && f.step < 0.1 ? 3 : 1)
+                : f.value}
               {f.unit ? ` ${f.unit}` : ''}
             </span>
           </div>
         ))}
         {fields.length > 4 && (
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: '9px', color: 'rgba(236,223,204,0.2)', textAlign: 'center', marginTop: '4px' }}>
+          <div
+            style={{
+              fontFamily: "'Space Grotesk',sans-serif",
+              fontSize: '9px',
+              color: 'rgba(236,223,204,0.2)',
+              textAlign: 'center',
+              marginTop: '4px'
+            }}
+          >
             +{fields.length - 4} more
           </div>
         )}
@@ -155,11 +249,39 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Frame type & mixer',
       accentColor: COLORS.airframe,
       fields: [
-        { key: 'SYS_AUTOSTART', label: 'TYPE', value: 'VTOL Tailsitter', type: 'select',
-          options: ['Quadrotor X', 'Hexarotor X', 'VTOL Duo Tailsitter', 'VTOL Tiltrotor', 'Octorotor'],
-          mavId: 'SYS_AUTOSTART' },
-        { key: 'CA_AIRFRAME', label: 'MIXER', value: 4, type: 'number', min: 0, max: 15, mavId: 'CA_AIRFRAME' },
-        { key: 'SYS_VEHICLE_RESP', label: 'RESPONSE', value: 0.5, type: 'number', step: 0.05, min: 0, max: 1, mavId: 'SYS_VEHICLE_RESP' },
+        {
+          key: 'SYS_AUTOSTART',
+          label: 'TYPE',
+          value: 'VTOL Tailsitter',
+          type: 'select',
+          options: [
+            'Quadrotor X',
+            'Hexarotor X',
+            'VTOL Duo Tailsitter',
+            'VTOL Tiltrotor',
+            'Octorotor'
+          ],
+          mavId: 'SYS_AUTOSTART'
+        },
+        {
+          key: 'CA_AIRFRAME',
+          label: 'MIXER',
+          value: 4,
+          type: 'number',
+          min: 0,
+          max: 15,
+          mavId: 'CA_AIRFRAME'
+        },
+        {
+          key: 'SYS_VEHICLE_RESP',
+          label: 'RESPONSE',
+          value: 0.5,
+          type: 'number',
+          step: 0.05,
+          min: 0,
+          max: 1,
+          mavId: 'SYS_VEHICLE_RESP'
+        }
       ]
     }
   },
@@ -173,10 +295,41 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Power configuration',
       accentColor: COLORS.battery,
       fields: [
-        { key: 'BAT1_N_CELLS', label: 'CELLS', value: 6, type: 'number', min: 1, max: 14, mavId: 'BAT1_N_CELLS' },
-        { key: 'BAT1_CAPACITY', label: 'CAPACITY', value: 16000, type: 'number', unit: 'mAh', mavId: 'BAT1_CAPACITY' },
-        { key: 'BAT1_V_FULL', label: 'V FULL', value: 4.2, type: 'number', step: 0.01, unit: 'V', mavId: 'BAT1_V_FULL' },
-        { key: 'BAT1_V_EMPTY', label: 'V EMPTY', value: 3.5, type: 'number', step: 0.01, unit: 'V', mavId: 'BAT1_V_EMPTY' },
+        {
+          key: 'BAT1_N_CELLS',
+          label: 'CELLS',
+          value: 6,
+          type: 'number',
+          min: 1,
+          max: 14,
+          mavId: 'BAT1_N_CELLS'
+        },
+        {
+          key: 'BAT1_CAPACITY',
+          label: 'CAPACITY',
+          value: 16000,
+          type: 'number',
+          unit: 'mAh',
+          mavId: 'BAT1_CAPACITY'
+        },
+        {
+          key: 'BAT1_V_FULL',
+          label: 'V FULL',
+          value: 4.2,
+          type: 'number',
+          step: 0.01,
+          unit: 'V',
+          mavId: 'BAT1_V_FULL'
+        },
+        {
+          key: 'BAT1_V_EMPTY',
+          label: 'V EMPTY',
+          value: 3.5,
+          type: 'number',
+          step: 0.01,
+          unit: 'V',
+          mavId: 'BAT1_V_EMPTY'
+        }
       ]
     }
   },
@@ -192,8 +345,25 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Horizontal position P loop',
       accentColor: COLORS.pos,
       fields: [
-        { key: 'MPC_XY_P', label: 'P', value: 0.95, type: 'number', step: 0.05, min: 0, max: 5, mavId: 'MPC_XY_P' },
-        { key: 'MPC_XY_VEL_MAX', label: 'VEL MAX', value: 12, type: 'number', step: 0.5, unit: 'm/s', mavId: 'MPC_XY_VEL_MAX' },
+        {
+          key: 'MPC_XY_P',
+          label: 'P',
+          value: 0.95,
+          type: 'number',
+          step: 0.05,
+          min: 0,
+          max: 5,
+          mavId: 'MPC_XY_P'
+        },
+        {
+          key: 'MPC_XY_VEL_MAX',
+          label: 'VEL MAX',
+          value: 12,
+          type: 'number',
+          step: 0.5,
+          unit: 'm/s',
+          mavId: 'MPC_XY_VEL_MAX'
+        }
       ]
     }
   },
@@ -207,9 +377,34 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Altitude P loop',
       accentColor: COLORS.pos,
       fields: [
-        { key: 'MPC_Z_P', label: 'P', value: 1.0, type: 'number', step: 0.05, min: 0, max: 5, mavId: 'MPC_Z_P' },
-        { key: 'MPC_Z_VEL_MAX_UP', label: 'VEL UP', value: 3.0, type: 'number', step: 0.1, unit: 'm/s', mavId: 'MPC_Z_VEL_MAX_UP' },
-        { key: 'MPC_Z_VEL_MAX_DN', label: 'VEL DN', value: 1.0, type: 'number', step: 0.1, unit: 'm/s', mavId: 'MPC_Z_VEL_MAX_DN' },
+        {
+          key: 'MPC_Z_P',
+          label: 'P',
+          value: 1.0,
+          type: 'number',
+          step: 0.05,
+          min: 0,
+          max: 5,
+          mavId: 'MPC_Z_P'
+        },
+        {
+          key: 'MPC_Z_VEL_MAX_UP',
+          label: 'VEL UP',
+          value: 3.0,
+          type: 'number',
+          step: 0.1,
+          unit: 'm/s',
+          mavId: 'MPC_Z_VEL_MAX_UP'
+        },
+        {
+          key: 'MPC_Z_VEL_MAX_DN',
+          label: 'VEL DN',
+          value: 1.0,
+          type: 'number',
+          step: 0.1,
+          unit: 'm/s',
+          mavId: 'MPC_Z_VEL_MAX_DN'
+        }
       ]
     }
   },
@@ -225,10 +420,45 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Horizontal velocity PID (inner)',
       accentColor: COLORS.vel,
       fields: [
-        { key: 'MPC_XY_VEL_P_ACC', label: 'P', value: 1.8, type: 'number', step: 0.05, min: 0, max: 20, mavId: 'MPC_XY_VEL_P_ACC' },
-        { key: 'MPC_XY_VEL_I_ACC', label: 'I', value: 0.4, type: 'number', step: 0.01, min: 0, max: 20, mavId: 'MPC_XY_VEL_I_ACC' },
-        { key: 'MPC_XY_VEL_D_ACC', label: 'D', value: 0.2, type: 'number', step: 0.005, min: 0, max: 5,  mavId: 'MPC_XY_VEL_D_ACC' },
-        { key: 'MPC_ACC_HOR',      label: 'ACC MAX', value: 3.0, type: 'number', step: 0.1, unit: 'm/s²', mavId: 'MPC_ACC_HOR' },
+        {
+          key: 'MPC_XY_VEL_P_ACC',
+          label: 'P',
+          value: 1.8,
+          type: 'number',
+          step: 0.05,
+          min: 0,
+          max: 20,
+          mavId: 'MPC_XY_VEL_P_ACC'
+        },
+        {
+          key: 'MPC_XY_VEL_I_ACC',
+          label: 'I',
+          value: 0.4,
+          type: 'number',
+          step: 0.01,
+          min: 0,
+          max: 20,
+          mavId: 'MPC_XY_VEL_I_ACC'
+        },
+        {
+          key: 'MPC_XY_VEL_D_ACC',
+          label: 'D',
+          value: 0.2,
+          type: 'number',
+          step: 0.005,
+          min: 0,
+          max: 5,
+          mavId: 'MPC_XY_VEL_D_ACC'
+        },
+        {
+          key: 'MPC_ACC_HOR',
+          label: 'ACC MAX',
+          value: 3.0,
+          type: 'number',
+          step: 0.1,
+          unit: 'm/s²',
+          mavId: 'MPC_ACC_HOR'
+        }
       ]
     }
   },
@@ -242,10 +472,46 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Vertical velocity PID (inner)',
       accentColor: COLORS.vel,
       fields: [
-        { key: 'MPC_Z_VEL_P_ACC', label: 'P', value: 4.0, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MPC_Z_VEL_P_ACC' },
-        { key: 'MPC_Z_VEL_I_ACC', label: 'I', value: 2.0, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MPC_Z_VEL_I_ACC' },
-        { key: 'MPC_Z_VEL_D_ACC', label: 'D', value: 0.0, type: 'number', step: 0.01, min: 0, max: 5,  mavId: 'MPC_Z_VEL_D_ACC' },
-        { key: 'MPC_THR_HOVER',   label: 'THR HOVER', value: 0.5, type: 'number', step: 0.01, min: 0.1, max: 0.9, mavId: 'MPC_THR_HOVER' },
+        {
+          key: 'MPC_Z_VEL_P_ACC',
+          label: 'P',
+          value: 4.0,
+          type: 'number',
+          step: 0.1,
+          min: 0,
+          max: 20,
+          mavId: 'MPC_Z_VEL_P_ACC'
+        },
+        {
+          key: 'MPC_Z_VEL_I_ACC',
+          label: 'I',
+          value: 2.0,
+          type: 'number',
+          step: 0.1,
+          min: 0,
+          max: 20,
+          mavId: 'MPC_Z_VEL_I_ACC'
+        },
+        {
+          key: 'MPC_Z_VEL_D_ACC',
+          label: 'D',
+          value: 0.0,
+          type: 'number',
+          step: 0.01,
+          min: 0,
+          max: 5,
+          mavId: 'MPC_Z_VEL_D_ACC'
+        },
+        {
+          key: 'MPC_THR_HOVER',
+          label: 'THR HOVER',
+          value: 0.5,
+          type: 'number',
+          step: 0.01,
+          min: 0.1,
+          max: 0.9,
+          mavId: 'MPC_THR_HOVER'
+        }
       ]
     }
   },
@@ -261,7 +527,16 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Roll attitude P (outer)',
       accentColor: COLORS.att,
       fields: [
-        { key: 'MC_ROLL_P', label: 'P', value: 6.5, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MC_ROLL_P' },
+        {
+          key: 'MC_ROLL_P',
+          label: 'P',
+          value: 6.5,
+          type: 'number',
+          step: 0.1,
+          min: 0,
+          max: 20,
+          mavId: 'MC_ROLL_P'
+        }
       ]
     }
   },
@@ -275,7 +550,16 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Pitch attitude P (outer)',
       accentColor: COLORS.att,
       fields: [
-        { key: 'MC_PITCH_P', label: 'P', value: 6.5, type: 'number', step: 0.1, min: 0, max: 20, mavId: 'MC_PITCH_P' },
+        {
+          key: 'MC_PITCH_P',
+          label: 'P',
+          value: 6.5,
+          type: 'number',
+          step: 0.1,
+          min: 0,
+          max: 20,
+          mavId: 'MC_PITCH_P'
+        }
       ]
     }
   },
@@ -289,8 +573,26 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Yaw attitude P (outer)',
       accentColor: COLORS.att,
       fields: [
-        { key: 'MC_YAW_P',      label: 'P',     value: 2.8, type: 'number', step: 0.1,  min: 0, max: 10, mavId: 'MC_YAW_P' },
-        { key: 'MC_YAW_WEIGHT', label: 'YAW W', value: 0.4, type: 'number', step: 0.05, min: 0, max: 1,  mavId: 'MC_YAW_WEIGHT' },
+        {
+          key: 'MC_YAW_P',
+          label: 'P',
+          value: 2.8,
+          type: 'number',
+          step: 0.1,
+          min: 0,
+          max: 10,
+          mavId: 'MC_YAW_P'
+        },
+        {
+          key: 'MC_YAW_WEIGHT',
+          label: 'YAW W',
+          value: 0.4,
+          type: 'number',
+          step: 0.05,
+          min: 0,
+          max: 1,
+          mavId: 'MC_YAW_WEIGHT'
+        }
       ]
     }
   },
@@ -306,10 +608,46 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Roll rate PID (inner)',
       accentColor: COLORS.rate,
       fields: [
-        { key: 'MC_ROLLRATE_P', label: 'P', value: 0.15, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_ROLLRATE_P' },
-        { key: 'MC_ROLLRATE_I', label: 'I', value: 0.20, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_ROLLRATE_I' },
-        { key: 'MC_ROLLRATE_D', label: 'D', value: 0.003, type: 'number', step: 0.0001, min: 0, max: 1, mavId: 'MC_ROLLRATE_D' },
-        { key: 'MC_ROLLRATE_FF', label: 'FF', value: 0.0, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_ROLLRATE_FF' },
+        {
+          key: 'MC_ROLLRATE_P',
+          label: 'P',
+          value: 0.15,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_ROLLRATE_P'
+        },
+        {
+          key: 'MC_ROLLRATE_I',
+          label: 'I',
+          value: 0.2,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_ROLLRATE_I'
+        },
+        {
+          key: 'MC_ROLLRATE_D',
+          label: 'D',
+          value: 0.003,
+          type: 'number',
+          step: 0.0001,
+          min: 0,
+          max: 1,
+          mavId: 'MC_ROLLRATE_D'
+        },
+        {
+          key: 'MC_ROLLRATE_FF',
+          label: 'FF',
+          value: 0.0,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_ROLLRATE_FF'
+        }
       ]
     }
   },
@@ -323,10 +661,46 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Pitch rate PID (inner)',
       accentColor: COLORS.rate,
       fields: [
-        { key: 'MC_PITCHRATE_P', label: 'P', value: 0.15, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_PITCHRATE_P' },
-        { key: 'MC_PITCHRATE_I', label: 'I', value: 0.20, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_PITCHRATE_I' },
-        { key: 'MC_PITCHRATE_D', label: 'D', value: 0.003, type: 'number', step: 0.0001, min: 0, max: 1, mavId: 'MC_PITCHRATE_D' },
-        { key: 'MC_PITCHRATE_FF', label: 'FF', value: 0.0, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_PITCHRATE_FF' },
+        {
+          key: 'MC_PITCHRATE_P',
+          label: 'P',
+          value: 0.15,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_PITCHRATE_P'
+        },
+        {
+          key: 'MC_PITCHRATE_I',
+          label: 'I',
+          value: 0.2,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_PITCHRATE_I'
+        },
+        {
+          key: 'MC_PITCHRATE_D',
+          label: 'D',
+          value: 0.003,
+          type: 'number',
+          step: 0.0001,
+          min: 0,
+          max: 1,
+          mavId: 'MC_PITCHRATE_D'
+        },
+        {
+          key: 'MC_PITCHRATE_FF',
+          label: 'FF',
+          value: 0.0,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_PITCHRATE_FF'
+        }
       ]
     }
   },
@@ -340,10 +714,46 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Yaw rate PID (inner)',
       accentColor: COLORS.rate,
       fields: [
-        { key: 'MC_YAWRATE_P', label: 'P', value: 0.20, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_YAWRATE_P' },
-        { key: 'MC_YAWRATE_I', label: 'I', value: 0.10, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_YAWRATE_I' },
-        { key: 'MC_YAWRATE_D', label: 'D', value: 0.0,  type: 'number', step: 0.0001, min: 0, max: 1, mavId: 'MC_YAWRATE_D' },
-        { key: 'MC_YAWRATE_FF', label: 'FF', value: 0.0, type: 'number', step: 0.001, min: 0, max: 5, mavId: 'MC_YAWRATE_FF' },
+        {
+          key: 'MC_YAWRATE_P',
+          label: 'P',
+          value: 0.2,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_YAWRATE_P'
+        },
+        {
+          key: 'MC_YAWRATE_I',
+          label: 'I',
+          value: 0.1,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_YAWRATE_I'
+        },
+        {
+          key: 'MC_YAWRATE_D',
+          label: 'D',
+          value: 0.0,
+          type: 'number',
+          step: 0.0001,
+          min: 0,
+          max: 1,
+          mavId: 'MC_YAWRATE_D'
+        },
+        {
+          key: 'MC_YAWRATE_FF',
+          label: 'FF',
+          value: 0.0,
+          type: 'number',
+          step: 0.001,
+          min: 0,
+          max: 5,
+          mavId: 'MC_YAWRATE_FF'
+        }
       ]
     }
   },
@@ -359,42 +769,988 @@ const INITIAL_NODES: ParamNode[] = [
       subtitle: 'Rate & angle limits',
       accentColor: COLORS.limits,
       fields: [
-        { key: 'MC_ROLLRATE_MAX',  label: 'ROLL MAX',  value: 220, type: 'number', unit: '°/s', mavId: 'MC_ROLLRATE_MAX' },
-        { key: 'MC_PITCHRATE_MAX', label: 'PITCH MAX', value: 220, type: 'number', unit: '°/s', mavId: 'MC_PITCHRATE_MAX' },
-        { key: 'MC_YAWRATE_MAX',   label: 'YAW MAX',   value: 200, type: 'number', unit: '°/s', mavId: 'MC_YAWRATE_MAX' },
-        { key: 'MPC_TILTMAX_AIR',  label: 'TILT MAX',  value: 45,  type: 'number', unit: '°',   mavId: 'MPC_TILTMAX_AIR' },
-        { key: 'MPC_VEL_MANUAL',   label: 'VEL MANUAL', value: 10, type: 'number', unit: 'm/s', mavId: 'MPC_VEL_MANUAL' },
+        {
+          key: 'MC_ROLLRATE_MAX',
+          label: 'ROLL MAX',
+          value: 220,
+          type: 'number',
+          unit: '°/s',
+          mavId: 'MC_ROLLRATE_MAX'
+        },
+        {
+          key: 'MC_PITCHRATE_MAX',
+          label: 'PITCH MAX',
+          value: 220,
+          type: 'number',
+          unit: '°/s',
+          mavId: 'MC_PITCHRATE_MAX'
+        },
+        {
+          key: 'MC_YAWRATE_MAX',
+          label: 'YAW MAX',
+          value: 200,
+          type: 'number',
+          unit: '°/s',
+          mavId: 'MC_YAWRATE_MAX'
+        },
+        {
+          key: 'MPC_TILTMAX_AIR',
+          label: 'TILT MAX',
+          value: 45,
+          type: 'number',
+          unit: '°',
+          mavId: 'MPC_TILTMAX_AIR'
+        },
+        {
+          key: 'MPC_VEL_MANUAL',
+          label: 'VEL MANUAL',
+          value: 10,
+          type: 'number',
+          unit: 'm/s',
+          mavId: 'MPC_VEL_MANUAL'
+        }
       ]
     }
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // ═══ VTOL LIFT-CRUISE-TILT SECTION ═════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // ── CONTROL SURFACES (조종면) ──────────────────────────────────────────────────
+  {
+    id: 'surf-tilt',
+    type: 'param',
+    position: { x: 60, y: 860 },
+    data: {
+      category: 'surface',
+      title: 'TILT SERVOS',
+      subtitle: 'Tiltrotor servo configuration',
+      accentColor: COLORS.surface,
+      fields: [
+        {
+          key: 'VT_TILT_MC',
+          label: 'MC ANGLE',
+          value: 90,
+          type: 'number',
+          unit: '°',
+          min: 0,
+          max: 90,
+          step: 1,
+          mavId: 'VT_TILT_MC'
+        },
+        {
+          key: 'VT_TILT_FW',
+          label: 'FW ANGLE',
+          value: 0,
+          type: 'number',
+          unit: '°',
+          min: 0,
+          max: 90,
+          step: 1,
+          mavId: 'VT_TILT_FW'
+        },
+        {
+          key: 'VT_TILT_TRANS',
+          label: 'TRANS ANGLE',
+          value: 45,
+          type: 'number',
+          unit: '°',
+          min: 0,
+          max: 90,
+          step: 1,
+          mavId: 'VT_TILT_TRANS'
+        },
+        {
+          key: 'VT_TILT_SPINUP',
+          label: 'SPINUP TIME',
+          value: 1.0,
+          type: 'number',
+          unit: 's',
+          min: 0,
+          max: 5,
+          step: 0.1,
+          mavId: 'VT_TILT_SPINUP'
+        }
+      ]
+    }
+  },
+  {
+    id: 'surf-elevon',
+    type: 'param',
+    position: { x: 60, y: 1110 },
+    data: {
+      category: 'surface',
+      title: 'ELEVON / FLAP',
+      subtitle: 'Fixed-wing control surfaces',
+      accentColor: COLORS.surface,
+      fields: [
+        {
+          key: 'FW_FLAPS_LND_SCL',
+          label: 'FLAP LND',
+          value: 1.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'FW_FLAPS_LND_SCL'
+        },
+        {
+          key: 'FW_FLAPS_SCL',
+          label: 'FLAP SCALE',
+          value: 1.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'FW_FLAPS_SCL'
+        },
+        {
+          key: 'FW_MAN_R_SC',
+          label: 'ROLL SCALE',
+          value: 1.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'FW_MAN_R_SC'
+        },
+        {
+          key: 'FW_MAN_P_SC',
+          label: 'PITCH SCALE',
+          value: 1.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'FW_MAN_P_SC'
+        },
+        {
+          key: 'FW_MAN_Y_SC',
+          label: 'YAW SCALE',
+          value: 1.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'FW_MAN_Y_SC'
+        }
+      ]
+    }
+  },
+  {
+    id: 'surf-mixer',
+    type: 'param',
+    position: { x: 60, y: 1380 },
+    data: {
+      category: 'surface',
+      title: 'ACTUATOR MIXER',
+      subtitle: 'Motor & servo allocation',
+      accentColor: COLORS.surface,
+      fields: [
+        {
+          key: 'CA_ROTOR_COUNT',
+          label: 'ROTORS',
+          value: 4,
+          type: 'number',
+          min: 1,
+          max: 8,
+          step: 1,
+          mavId: 'CA_ROTOR_COUNT'
+        },
+        {
+          key: 'CA_SV_CS_COUNT',
+          label: 'SERVOS',
+          value: 4,
+          type: 'number',
+          min: 0,
+          max: 8,
+          step: 1,
+          mavId: 'CA_SV_CS_COUNT'
+        },
+        {
+          key: 'CA_SV_TL_COUNT',
+          label: 'TILT SERVOS',
+          value: 2,
+          type: 'number',
+          min: 0,
+          max: 4,
+          step: 1,
+          mavId: 'CA_SV_TL_COUNT'
+        },
+        {
+          key: 'VT_MOT_COUNT',
+          label: 'VTOL MOTORS',
+          value: 4,
+          type: 'number',
+          min: 0,
+          max: 8,
+          step: 1,
+          mavId: 'VT_MOT_COUNT'
+        }
+      ]
+    }
+  },
+
+  // ── TRANSITION (MC ↔ FW 전환) ──────────────────────────────────────────────────
+  {
+    id: 'trans-mc-fw',
+    type: 'param',
+    position: { x: 380, y: 860 },
+    data: {
+      category: 'transition',
+      title: 'MC → FW TRANSITION',
+      subtitle: 'Forward transition config',
+      accentColor: COLORS.transition,
+      fields: [
+        {
+          key: 'VT_F_TRANS_DUR',
+          label: 'DURATION',
+          value: 5.0,
+          type: 'number',
+          unit: 's',
+          min: 0,
+          max: 30,
+          step: 0.5,
+          mavId: 'VT_F_TRANS_DUR'
+        },
+        {
+          key: 'VT_F_TRANS_THR',
+          label: 'THROTTLE',
+          value: 0.7,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'VT_F_TRANS_THR'
+        },
+        {
+          key: 'VT_ARSP_TRANS',
+          label: 'AIRSPEED',
+          value: 15.0,
+          type: 'number',
+          unit: 'm/s',
+          min: 5,
+          max: 40,
+          step: 0.5,
+          mavId: 'VT_ARSP_TRANS'
+        },
+        {
+          key: 'VT_TRANS_MIN_TM',
+          label: 'MIN TIME',
+          value: 2.0,
+          type: 'number',
+          unit: 's',
+          min: 0,
+          max: 20,
+          step: 0.5,
+          mavId: 'VT_TRANS_MIN_TM'
+        }
+      ]
+    }
+  },
+  {
+    id: 'trans-fw-mc',
+    type: 'param',
+    position: { x: 380, y: 1110 },
+    data: {
+      category: 'transition',
+      title: 'FW → MC TRANSITION',
+      subtitle: 'Back transition config',
+      accentColor: COLORS.transition,
+      fields: [
+        {
+          key: 'VT_B_TRANS_DUR',
+          label: 'DURATION',
+          value: 4.0,
+          type: 'number',
+          unit: 's',
+          min: 0,
+          max: 20,
+          step: 0.5,
+          mavId: 'VT_B_TRANS_DUR'
+        },
+        {
+          key: 'VT_B_TRANS_THR',
+          label: 'THROTTLE',
+          value: 0.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'VT_B_TRANS_THR'
+        },
+        {
+          key: 'VT_B_DEC_MSS',
+          label: 'DECEL',
+          value: 2.0,
+          type: 'number',
+          unit: 'm/s²',
+          min: 0,
+          max: 10,
+          step: 0.1,
+          mavId: 'VT_B_DEC_MSS'
+        },
+        {
+          key: 'VT_B_REV_OUT',
+          label: 'REVERSE THR',
+          value: 0.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'VT_B_REV_OUT'
+        }
+      ]
+    }
+  },
+  {
+    id: 'trans-general',
+    type: 'param',
+    position: { x: 380, y: 1380 },
+    data: {
+      category: 'transition',
+      title: 'VTOL GENERAL',
+      subtitle: 'VTOL common parameters',
+      accentColor: COLORS.transition,
+      fields: [
+        {
+          key: 'VT_TYPE',
+          label: 'VTOL TYPE',
+          value: 'Tiltrotor',
+          type: 'select',
+          options: ['Tailsitter', 'Tiltrotor', 'Standard'],
+          mavId: 'VT_TYPE'
+        },
+        {
+          key: 'VT_FW_ALT_ERR',
+          label: 'ALT ERROR',
+          value: 10.0,
+          type: 'number',
+          unit: 'm',
+          min: 0,
+          max: 50,
+          step: 1,
+          mavId: 'VT_FW_ALT_ERR'
+        },
+        {
+          key: 'VT_FW_MIN_ALT',
+          label: 'MIN ALT',
+          value: 20.0,
+          type: 'number',
+          unit: 'm',
+          min: 0,
+          max: 200,
+          step: 5,
+          mavId: 'VT_FW_MIN_ALT'
+        },
+        {
+          key: 'VT_FW_QC_P',
+          label: 'QC PITCH',
+          value: 0,
+          type: 'number',
+          unit: '°',
+          min: 0,
+          max: 45,
+          step: 1,
+          mavId: 'VT_FW_QC_P'
+        }
+      ]
+    }
+  },
+
+  // ── LQR CONTROL (상태 피드백 제어) ──────────────────────────────────────────────
+  {
+    id: 'lqr-mc',
+    type: 'param',
+    position: { x: 700, y: 860 },
+    data: {
+      category: 'lqr',
+      title: 'LQR MC MODE',
+      subtitle: 'MC state-feedback gains (Q/R)',
+      accentColor: COLORS.lqr,
+      fields: [
+        {
+          key: 'LQR_MC_Q_ROLL',
+          label: 'Q ROLL',
+          value: 10.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_MC_Q_ROLL'
+        },
+        {
+          key: 'LQR_MC_Q_PITCH',
+          label: 'Q PITCH',
+          value: 10.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_MC_Q_PITCH'
+        },
+        {
+          key: 'LQR_MC_Q_YAW',
+          label: 'Q YAW',
+          value: 5.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_MC_Q_YAW'
+        },
+        {
+          key: 'LQR_MC_Q_ALT',
+          label: 'Q ALT',
+          value: 8.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_MC_Q_ALT'
+        },
+        {
+          key: 'LQR_MC_R_THR',
+          label: 'R THRUST',
+          value: 1.0,
+          type: 'number',
+          min: 0.01,
+          max: 50,
+          step: 0.1,
+          mavId: 'LQR_MC_R_THR'
+        },
+        {
+          key: 'LQR_MC_R_TORQ',
+          label: 'R TORQUE',
+          value: 1.0,
+          type: 'number',
+          min: 0.01,
+          max: 50,
+          step: 0.1,
+          mavId: 'LQR_MC_R_TORQ'
+        }
+      ]
+    }
+  },
+  {
+    id: 'lqr-fw',
+    type: 'param',
+    position: { x: 700, y: 1160 },
+    data: {
+      category: 'lqr',
+      title: 'LQR FW MODE',
+      subtitle: 'FW state-feedback gains (Q/R)',
+      accentColor: COLORS.lqr,
+      fields: [
+        {
+          key: 'LQR_FW_Q_ROLL',
+          label: 'Q ROLL',
+          value: 8.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_FW_Q_ROLL'
+        },
+        {
+          key: 'LQR_FW_Q_PITCH',
+          label: 'Q PITCH',
+          value: 12.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_FW_Q_PITCH'
+        },
+        {
+          key: 'LQR_FW_Q_YAW',
+          label: 'Q YAW',
+          value: 3.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_FW_Q_YAW'
+        },
+        {
+          key: 'LQR_FW_Q_ARSP',
+          label: 'Q AIRSPD',
+          value: 6.0,
+          type: 'number',
+          min: 0.1,
+          max: 100,
+          step: 0.5,
+          mavId: 'LQR_FW_Q_ARSP'
+        },
+        {
+          key: 'LQR_FW_R_SURF',
+          label: 'R SURFACE',
+          value: 1.0,
+          type: 'number',
+          min: 0.01,
+          max: 50,
+          step: 0.1,
+          mavId: 'LQR_FW_R_SURF'
+        },
+        {
+          key: 'LQR_FW_R_THR',
+          label: 'R THRUST',
+          value: 1.5,
+          type: 'number',
+          min: 0.01,
+          max: 50,
+          step: 0.1,
+          mavId: 'LQR_FW_R_THR'
+        }
+      ]
+    }
+  },
+
+  // ── MPC CONTROL (모델 예측 제어) ────────────────────────────────────────────────
+  {
+    id: 'mpc-horizon',
+    type: 'param',
+    position: { x: 1020, y: 860 },
+    data: {
+      category: 'mpc_ctrl',
+      title: 'MPC HORIZON',
+      subtitle: 'Prediction & control horizon',
+      accentColor: COLORS.mpc_ctrl,
+      fields: [
+        {
+          key: 'MPC_N_PRED',
+          label: 'PRED STEPS',
+          value: 20,
+          type: 'number',
+          min: 5,
+          max: 100,
+          step: 1,
+          mavId: 'MPC_N_PRED'
+        },
+        {
+          key: 'MPC_N_CTRL',
+          label: 'CTRL STEPS',
+          value: 10,
+          type: 'number',
+          min: 1,
+          max: 50,
+          step: 1,
+          mavId: 'MPC_N_CTRL'
+        },
+        {
+          key: 'MPC_DT',
+          label: 'STEP TIME',
+          value: 0.05,
+          type: 'number',
+          unit: 's',
+          min: 0.01,
+          max: 0.5,
+          step: 0.01,
+          mavId: 'MPC_DT'
+        },
+        {
+          key: 'MPC_ITER_MAX',
+          label: 'MAX ITER',
+          value: 5,
+          type: 'number',
+          min: 1,
+          max: 50,
+          step: 1,
+          mavId: 'MPC_ITER_MAX'
+        }
+      ]
+    }
+  },
+  {
+    id: 'mpc-weight',
+    type: 'param',
+    position: { x: 1020, y: 1110 },
+    data: {
+      category: 'mpc_ctrl',
+      title: 'MPC WEIGHTS',
+      subtitle: 'Cost function weights',
+      accentColor: COLORS.mpc_ctrl,
+      fields: [
+        {
+          key: 'MPC_W_POS',
+          label: 'W POS',
+          value: 10.0,
+          type: 'number',
+          min: 0,
+          max: 100,
+          step: 0.5,
+          mavId: 'MPC_W_POS'
+        },
+        {
+          key: 'MPC_W_VEL',
+          label: 'W VEL',
+          value: 5.0,
+          type: 'number',
+          min: 0,
+          max: 100,
+          step: 0.5,
+          mavId: 'MPC_W_VEL'
+        },
+        {
+          key: 'MPC_W_ATT',
+          label: 'W ATT',
+          value: 8.0,
+          type: 'number',
+          min: 0,
+          max: 100,
+          step: 0.5,
+          mavId: 'MPC_W_ATT'
+        },
+        {
+          key: 'MPC_W_INPUT',
+          label: 'W INPUT',
+          value: 1.0,
+          type: 'number',
+          min: 0,
+          max: 50,
+          step: 0.1,
+          mavId: 'MPC_W_INPUT'
+        },
+        {
+          key: 'MPC_W_DELT',
+          label: 'W Δ INPUT',
+          value: 2.0,
+          type: 'number',
+          min: 0,
+          max: 50,
+          step: 0.1,
+          mavId: 'MPC_W_DELT'
+        },
+        {
+          key: 'MPC_W_TERM',
+          label: 'W TERMINAL',
+          value: 15.0,
+          type: 'number',
+          min: 0,
+          max: 200,
+          step: 1.0,
+          mavId: 'MPC_W_TERM'
+        }
+      ]
+    }
+  },
+  {
+    id: 'mpc-constraint',
+    type: 'param',
+    position: { x: 1020, y: 1400 },
+    data: {
+      category: 'mpc_ctrl',
+      title: 'MPC CONSTRAINTS',
+      subtitle: 'Input & state constraints',
+      accentColor: COLORS.mpc_ctrl,
+      fields: [
+        {
+          key: 'MPC_THR_MAX',
+          label: 'THR MAX',
+          value: 1.0,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          mavId: 'MPC_THR_MAX'
+        },
+        {
+          key: 'MPC_THR_MIN',
+          label: 'THR MIN',
+          value: 0.05,
+          type: 'number',
+          min: 0,
+          max: 1,
+          step: 0.01,
+          mavId: 'MPC_THR_MIN'
+        },
+        {
+          key: 'MPC_TILT_LIM',
+          label: 'TILT LIM',
+          value: 35.0,
+          type: 'number',
+          unit: '°',
+          min: 0,
+          max: 90,
+          step: 1,
+          mavId: 'MPC_TILT_LIM'
+        },
+        {
+          key: 'MPC_RATE_LIM',
+          label: 'RATE LIM',
+          value: 200,
+          type: 'number',
+          unit: '°/s',
+          min: 10,
+          max: 500,
+          step: 10,
+          mavId: 'MPC_RATE_LIM'
+        }
+      ]
+    }
+  },
+
+  // ── FLIGHT PARAMETERS (비행 파라미터) ───────────────────────────────────────────
+  {
+    id: 'flt-fw-speed',
+    type: 'param',
+    position: { x: 1340, y: 860 },
+    data: {
+      category: 'flight',
+      title: 'FW AIRSPEED',
+      subtitle: 'Fixed-wing speed limits',
+      accentColor: COLORS.flight,
+      fields: [
+        {
+          key: 'FW_AIRSPD_MIN',
+          label: 'MIN',
+          value: 12.0,
+          type: 'number',
+          unit: 'm/s',
+          min: 5,
+          max: 40,
+          step: 0.5,
+          mavId: 'FW_AIRSPD_MIN'
+        },
+        {
+          key: 'FW_AIRSPD_TRIM',
+          label: 'TRIM',
+          value: 18.0,
+          type: 'number',
+          unit: 'm/s',
+          min: 5,
+          max: 50,
+          step: 0.5,
+          mavId: 'FW_AIRSPD_TRIM'
+        },
+        {
+          key: 'FW_AIRSPD_MAX',
+          label: 'MAX',
+          value: 28.0,
+          type: 'number',
+          unit: 'm/s',
+          min: 10,
+          max: 80,
+          step: 0.5,
+          mavId: 'FW_AIRSPD_MAX'
+        },
+        {
+          key: 'FW_AIRSPD_STALL',
+          label: 'STALL',
+          value: 10.0,
+          type: 'number',
+          unit: 'm/s',
+          min: 3,
+          max: 30,
+          step: 0.5,
+          mavId: 'FW_AIRSPD_STALL'
+        }
+      ]
+    }
+  },
+  {
+    id: 'flt-fw-att',
+    type: 'param',
+    position: { x: 1340, y: 1110 },
+    data: {
+      category: 'flight',
+      title: 'FW ATTITUDE',
+      subtitle: 'Fixed-wing attitude limits',
+      accentColor: COLORS.flight,
+      fields: [
+        {
+          key: 'FW_P_LIM_MAX',
+          label: 'PITCH UP',
+          value: 30.0,
+          type: 'number',
+          unit: '°',
+          min: 0,
+          max: 60,
+          step: 1,
+          mavId: 'FW_P_LIM_MAX'
+        },
+        {
+          key: 'FW_P_LIM_MIN',
+          label: 'PITCH DN',
+          value: -15.0,
+          type: 'number',
+          unit: '°',
+          min: -60,
+          max: 0,
+          step: 1,
+          mavId: 'FW_P_LIM_MIN'
+        },
+        {
+          key: 'FW_R_LIM',
+          label: 'ROLL LIM',
+          value: 50.0,
+          type: 'number',
+          unit: '°',
+          min: 10,
+          max: 80,
+          step: 1,
+          mavId: 'FW_R_LIM'
+        },
+        {
+          key: 'FW_CLMBOUT_DIFF',
+          label: 'CLMBOUT',
+          value: 10.0,
+          type: 'number',
+          unit: '°',
+          min: 0,
+          max: 45,
+          step: 1,
+          mavId: 'FW_CLMBOUT_DIFF'
+        }
+      ]
+    }
+  },
+  {
+    id: 'flt-alt-nav',
+    type: 'param',
+    position: { x: 1340, y: 1380 },
+    data: {
+      category: 'flight',
+      title: 'ALT & NAV',
+      subtitle: 'Altitude & navigation params',
+      accentColor: COLORS.flight,
+      fields: [
+        {
+          key: 'MIS_TAKEOFF_ALT',
+          label: 'TAKEOFF ALT',
+          value: 25.0,
+          type: 'number',
+          unit: 'm',
+          min: 1,
+          max: 200,
+          step: 1,
+          mavId: 'MIS_TAKEOFF_ALT'
+        },
+        {
+          key: 'RTL_RETURN_ALT',
+          label: 'RTL ALT',
+          value: 50.0,
+          type: 'number',
+          unit: 'm',
+          min: 5,
+          max: 500,
+          step: 5,
+          mavId: 'RTL_RETURN_ALT'
+        },
+        {
+          key: 'NAV_ACC_RAD',
+          label: 'WP RADIUS',
+          value: 10.0,
+          type: 'number',
+          unit: 'm',
+          min: 0.5,
+          max: 100,
+          step: 0.5,
+          mavId: 'NAV_ACC_RAD'
+        },
+        {
+          key: 'NAV_LOITER_RAD',
+          label: 'LOITER RAD',
+          value: 50.0,
+          type: 'number',
+          unit: 'm',
+          min: 10,
+          max: 500,
+          step: 5,
+          mavId: 'NAV_LOITER_RAD'
+        },
+        {
+          key: 'FW_T_CLMB_MAX',
+          label: 'CLIMB MAX',
+          value: 5.0,
+          type: 'number',
+          unit: 'm/s',
+          min: 0.5,
+          max: 15,
+          step: 0.5,
+          mavId: 'FW_T_CLMB_MAX'
+        },
+        {
+          key: 'FW_T_SINK_MIN',
+          label: 'SINK MIN',
+          value: 2.0,
+          type: 'number',
+          unit: 'm/s',
+          min: 0.5,
+          max: 10,
+          step: 0.5,
+          mavId: 'FW_T_SINK_MIN'
+        }
+      ]
+    }
+  }
 ]
 
 const EDGE_STYLE_AF = { stroke: COLORS.airframe + 'AA', strokeWidth: 1.5 }
 const EDGE_STYLE_POS = { stroke: COLORS.pos + 'AA', strokeWidth: 1.5 }
 const EDGE_STYLE_ATT = { stroke: COLORS.att + 'AA', strokeWidth: 1.5 }
 const EDGE_STYLE_BAT = { stroke: COLORS.battery + '66', strokeWidth: 1.5 }
+const EDGE_STYLE_SURF = { stroke: COLORS.surface + 'AA', strokeWidth: 1.5 }
+const EDGE_STYLE_TRANS = { stroke: COLORS.transition + 'AA', strokeWidth: 1.5 }
+const EDGE_STYLE_LQR = { stroke: COLORS.lqr + 'AA', strokeWidth: 1.5 }
+const EDGE_STYLE_MPC = { stroke: COLORS.mpc_ctrl + 'AA', strokeWidth: 1.5 }
 
 const INITIAL_EDGES: Edge[] = [
+  // ── Existing PX4 control architecture ──────────────────────────────────────
   // Airframe → position
   { id: 'af-xypos', source: 'airframe', target: 'xy-pos', style: EDGE_STYLE_AF },
-  { id: 'af-zpos',  source: 'airframe', target: 'z-pos',  style: EDGE_STYLE_AF },
+  { id: 'af-zpos', source: 'airframe', target: 'z-pos', style: EDGE_STYLE_AF },
   // Airframe → attitude (per axis)
-  { id: 'af-att-roll',  source: 'airframe', target: 'att-roll',  style: EDGE_STYLE_AF },
+  { id: 'af-att-roll', source: 'airframe', target: 'att-roll', style: EDGE_STYLE_AF },
   { id: 'af-att-pitch', source: 'airframe', target: 'att-pitch', style: EDGE_STYLE_AF },
-  { id: 'af-att-yaw',   source: 'airframe', target: 'att-yaw',   style: EDGE_STYLE_AF },
+  { id: 'af-att-yaw', source: 'airframe', target: 'att-yaw', style: EDGE_STYLE_AF },
   // Position → velocity
   { id: 'xypos-xyvel', source: 'xy-pos', target: 'xy-vel', style: EDGE_STYLE_POS },
-  { id: 'zpos-zvel',   source: 'z-pos',  target: 'z-vel',  style: EDGE_STYLE_POS },
+  { id: 'zpos-zvel', source: 'z-pos', target: 'z-vel', style: EDGE_STYLE_POS },
   // Attitude P → Rate PID (per axis)
-  { id: 'att-roll-rate',  source: 'att-roll',  target: 'rate-roll',  style: EDGE_STYLE_ATT },
+  { id: 'att-roll-rate', source: 'att-roll', target: 'rate-roll', style: EDGE_STYLE_ATT },
   { id: 'att-pitch-rate', source: 'att-pitch', target: 'rate-pitch', style: EDGE_STYLE_ATT },
-  { id: 'att-yaw-rate',   source: 'att-yaw',   target: 'rate-yaw',   style: EDGE_STYLE_ATT },
+  { id: 'att-yaw-rate', source: 'att-yaw', target: 'rate-yaw', style: EDGE_STYLE_ATT },
   // Battery → limits
   { id: 'bat-limits', source: 'battery', target: 'limits', style: EDGE_STYLE_BAT },
   // Rate → limits
-  { id: 'roll-lim',  source: 'rate-roll',  target: 'limits', style: { stroke: COLORS.rate + '55', strokeWidth: 1 } },
-  { id: 'pitch-lim', source: 'rate-pitch', target: 'limits', style: { stroke: COLORS.rate + '55', strokeWidth: 1 } },
-  { id: 'yaw-lim',   source: 'rate-yaw',   target: 'limits', style: { stroke: COLORS.rate + '55', strokeWidth: 1 } },
+  {
+    id: 'roll-lim',
+    source: 'rate-roll',
+    target: 'limits',
+    style: { stroke: COLORS.rate + '55', strokeWidth: 1 }
+  },
+  {
+    id: 'pitch-lim',
+    source: 'rate-pitch',
+    target: 'limits',
+    style: { stroke: COLORS.rate + '55', strokeWidth: 1 }
+  },
+  {
+    id: 'yaw-lim',
+    source: 'rate-yaw',
+    target: 'limits',
+    style: { stroke: COLORS.rate + '55', strokeWidth: 1 }
+  },
+
+  // ── VTOL Lift-Cruise-Tilt section ──────────────────────────────────────────
+  // Surfaces → Transition
+  { id: 'tilt-trans', source: 'surf-tilt', target: 'trans-mc-fw', style: EDGE_STYLE_SURF },
+  { id: 'elevon-trans', source: 'surf-elevon', target: 'trans-fw-mc', style: EDGE_STYLE_SURF },
+  { id: 'mixer-trans', source: 'surf-mixer', target: 'trans-general', style: EDGE_STYLE_SURF },
+  // Transition → LQR
+  { id: 'trans-lqr-mc', source: 'trans-mc-fw', target: 'lqr-mc', style: EDGE_STYLE_TRANS },
+  { id: 'trans-lqr-fw', source: 'trans-fw-mc', target: 'lqr-fw', style: EDGE_STYLE_TRANS },
+  // Transition → MPC
+  { id: 'trans-gen-mpc', source: 'trans-general', target: 'mpc-horizon', style: EDGE_STYLE_TRANS },
+  // LQR → MPC
+  { id: 'lqr-mc-mpc', source: 'lqr-mc', target: 'mpc-weight', style: EDGE_STYLE_LQR },
+  { id: 'lqr-fw-mpc', source: 'lqr-fw', target: 'mpc-constraint', style: EDGE_STYLE_LQR },
+  // MPC → Flight params
+  { id: 'mpc-hor-flt', source: 'mpc-horizon', target: 'flt-fw-speed', style: EDGE_STYLE_MPC },
+  { id: 'mpc-wgt-flt', source: 'mpc-weight', target: 'flt-fw-att', style: EDGE_STYLE_MPC },
+  { id: 'mpc-con-flt', source: 'mpc-constraint', target: 'flt-alt-nav', style: EDGE_STYLE_MPC }
 ]
 
 // ─── Edit Panel ────────────────────────────────────────────────────────────────
@@ -414,9 +1770,29 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
 
   if (!node) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '8px', padding: '20px' }}>
-        <div style={{ fontFamily: grotesk, fontSize: '12px', color: 'rgba(236,223,204,0.22)', textAlign: 'center', lineHeight: 1.7 }}>
-          노드를 클릭하면<br />파라미터를 편집합니다
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          gap: '8px',
+          padding: '20px'
+        }}
+      >
+        <div
+          style={{
+            fontFamily: grotesk,
+            fontSize: '12px',
+            color: 'rgba(236,223,204,0.22)',
+            textAlign: 'center',
+            lineHeight: 1.7
+          }}
+        >
+          노드를 클릭하면
+          <br />
+          파라미터를 편집합니다
         </div>
       </div>
     )
@@ -427,11 +1803,28 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
-      <div style={{ padding: '14px 16px', borderBottom: border, background: `${data.accentColor}0E` }}>
-        <div style={{ fontFamily: mono, fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: data.accentColor }}>
+      <div
+        style={{ padding: '14px 16px', borderBottom: border, background: `${data.accentColor}0E` }}
+      >
+        <div
+          style={{
+            fontFamily: mono,
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            color: data.accentColor
+          }}
+        >
           {data.title}
         </div>
-        <div style={{ fontFamily: grotesk, fontSize: '10px', color: 'rgba(236,223,204,0.3)', marginTop: '2px' }}>
+        <div
+          style={{
+            fontFamily: grotesk,
+            fontSize: '10px',
+            color: 'rgba(236,223,204,0.3)',
+            marginTop: '2px'
+          }}
+        >
           {data.subtitle}
         </div>
       </div>
@@ -440,12 +1833,35 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
         {(data.fields as ParamField[]).map((f) => (
           <div key={f.key} style={{ marginBottom: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <span style={{ fontFamily: grotesk, fontSize: '10px', fontWeight: 600, color: 'rgba(236,223,204,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '4px'
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: grotesk,
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: 'rgba(236,223,204,0.5)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em'
+                }}
+              >
                 {f.label}
               </span>
               {f.mavId && (
-                <span style={{ fontFamily: mono, fontSize: '9px', color: 'rgba(236,223,204,0.18)', letterSpacing: '0.04em' }}>
+                <span
+                  style={{
+                    fontFamily: mono,
+                    fontSize: '9px',
+                    color: 'rgba(236,223,204,0.18)',
+                    letterSpacing: '0.04em'
+                  }}
+                >
                   {f.mavId}
                 </span>
               )}
@@ -455,9 +1871,24 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
               <select
                 value={f.value as string}
                 onChange={(e) => onFieldChange(node.id, f.key, e.target.value)}
-                style={{ width: '100%', fontFamily: mono, fontSize: '11px', background: 'rgba(60,61,55,0.6)', border: `1px solid ${data.accentColor}38`, borderRadius: '4px', color: '#ECDFCC', padding: '6px 8px', outline: 'none', cursor: 'pointer' }}
+                style={{
+                  width: '100%',
+                  fontFamily: mono,
+                  fontSize: '11px',
+                  background: 'rgba(60,61,55,0.6)',
+                  border: `1px solid ${data.accentColor}38`,
+                  borderRadius: '4px',
+                  color: '#ECDFCC',
+                  padding: '6px 8px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
               >
-                {f.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                {f.options?.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
               </select>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -468,10 +1899,27 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
                   max={f.max}
                   step={f.step ?? 1}
                   onChange={(e) => onFieldChange(node.id, f.key, parseFloat(e.target.value))}
-                  style={{ flex: 1, fontFamily: mono, fontSize: '12px', background: 'rgba(60,61,55,0.6)', border: `1px solid ${data.accentColor}38`, borderRadius: '4px', color: '#ECDFCC', padding: '6px 8px', outline: 'none' }}
+                  style={{
+                    flex: 1,
+                    fontFamily: mono,
+                    fontSize: '12px',
+                    background: 'rgba(60,61,55,0.6)',
+                    border: `1px solid ${data.accentColor}38`,
+                    borderRadius: '4px',
+                    color: '#ECDFCC',
+                    padding: '6px 8px',
+                    outline: 'none'
+                  }}
                 />
                 {f.unit && (
-                  <span style={{ fontFamily: mono, fontSize: '10px', color: 'rgba(236,223,204,0.3)', minWidth: '32px' }}>
+                  <span
+                    style={{
+                      fontFamily: mono,
+                      fontSize: '10px',
+                      color: 'rgba(236,223,204,0.3)',
+                      minWidth: '32px'
+                    }}
+                  >
                     {f.unit}
                   </span>
                 )}
@@ -484,14 +1932,36 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
       {/* Upload */}
       <div style={{ padding: '12px 16px', borderTop: border }}>
         {uploadMsg && (
-          <div style={{ fontFamily: mono, fontSize: '10px', textAlign: 'center', marginBottom: '8px', color: uploadMsg.startsWith('✓') ? '#A5D6A7' : '#E87020' }}>
+          <div
+            style={{
+              fontFamily: mono,
+              fontSize: '10px',
+              textAlign: 'center',
+              marginBottom: '8px',
+              color: uploadMsg.startsWith('✓') ? '#A5D6A7' : '#E87020'
+            }}
+          >
             {uploadMsg}
           </div>
         )}
         <button
           onClick={onUpload}
           disabled={uploading}
-          style={{ width: '100%', fontFamily: mono, fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', padding: '9px', background: uploading ? 'rgba(236,223,204,0.05)' : `${data.accentColor}18`, border: `1px solid ${uploading ? 'rgba(236,223,204,0.12)' : data.accentColor + '55'}`, borderRadius: '5px', color: uploading ? 'rgba(236,223,204,0.25)' : data.accentColor, cursor: uploading ? 'default' : 'pointer', textTransform: 'uppercase', transition: 'all 0.15s ease' }}
+          style={{
+            width: '100%',
+            fontFamily: mono,
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            padding: '9px',
+            background: uploading ? 'rgba(236,223,204,0.05)' : `${data.accentColor}18`,
+            border: `1px solid ${uploading ? 'rgba(236,223,204,0.12)' : data.accentColor + '55'}`,
+            borderRadius: '5px',
+            color: uploading ? 'rgba(236,223,204,0.25)' : data.accentColor,
+            cursor: uploading ? 'default' : 'pointer',
+            textTransform: 'uppercase',
+            transition: 'all 0.15s ease'
+          }}
         >
           {uploading ? 'UPLOADING...' : `UPLOAD ${data.title}`}
         </button>
@@ -505,19 +1975,43 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
 function Legend() {
   const items: [NodeCategory, string][] = [
     ['airframe', 'Config'],
-    ['battery',  'Power'],
-    ['pos',      'Position P'],
-    ['vel',      'Velocity PID'],
-    ['att',      'Attitude P'],
-    ['rate',     'Rate PID'],
-    ['limits',   'Limits'],
+    ['battery', 'Power'],
+    ['pos', 'Position P'],
+    ['vel', 'Velocity PID'],
+    ['att', 'Attitude P'],
+    ['rate', 'Rate PID'],
+    ['limits', 'Limits'],
+    ['surface', 'Surfaces'],
+    ['transition', 'Transition'],
+    ['lqr', 'LQR'],
+    ['mpc_ctrl', 'MPC'],
+    ['flight', 'Flight']
   ]
   return (
-    <div style={{ position: 'absolute', bottom: 12, left: 12, zIndex: 10, display: 'flex', gap: '10px', flexWrap: 'wrap', maxWidth: 600 }}>
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 12,
+        left: 12,
+        zIndex: 10,
+        display: 'flex',
+        gap: '10px',
+        flexWrap: 'wrap',
+        maxWidth: 600
+      }}
+    >
       {items.map(([cat, label]) => (
         <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[cat] }} />
-          <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: '9px', color: 'rgba(236,223,204,0.35)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <span
+            style={{
+              fontFamily: "'Space Grotesk',sans-serif",
+              fontSize: '9px',
+              color: 'rgba(236,223,204,0.35)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em'
+            }}
+          >
             {label}
           </span>
         </div>
@@ -583,7 +2077,7 @@ function ParameterFlowCanvas() {
           index: -1
         })
       }
-      setUploadMsg(`✓ ${data.title} uploaded (${fields.filter(f => f.mavId).length} params)`)
+      setUploadMsg(`✓ ${data.title} uploaded (${fields.filter((f) => f.mavId).length} params)`)
     } catch {
       setUploadMsg('✗ Upload failed')
     } finally {
@@ -594,13 +2088,47 @@ function ParameterFlowCanvas() {
   const mono = "'JetBrains Mono', monospace"
 
   return (
-    <div style={{ position: 'absolute', inset: 0, top: '56px', display: 'flex', background: '#181C14' }}>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        top: '56px',
+        display: 'flex',
+        background: '#181C14'
+      }}
+    >
       {/* Toolbar */}
-      <div style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10, display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <span style={{ fontFamily: mono, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(236,223,204,0.45)', textTransform: 'uppercase' }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          zIndex: 10,
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'center'
+        }}
+      >
+        <span
+          style={{
+            fontFamily: mono,
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            color: 'rgba(236,223,204,0.45)',
+            textTransform: 'uppercase'
+          }}
+        >
           PARAMETER BUILDER
         </span>
-        <span style={{ fontFamily: mono, fontSize: '9px', color: 'rgba(236,223,204,0.2)', letterSpacing: '0.06em' }}>
+        <span
+          style={{
+            fontFamily: mono,
+            fontSize: '9px',
+            color: 'rgba(236,223,204,0.2)',
+            letterSpacing: '0.06em'
+          }}
+        >
           PX4 Control Architecture
         </span>
       </div>
@@ -620,8 +2148,19 @@ function ParameterFlowCanvas() {
           style={{ background: '#181C14' }}
           defaultEdgeOptions={{ type: 'smoothstep' }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(236,223,204,0.05)" />
-          <Controls style={{ background: 'rgba(28,32,22,0.9)', border: '1px solid rgba(236,223,204,0.12)', borderRadius: '6px' }} />
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={24}
+            size={1}
+            color="rgba(236,223,204,0.05)"
+          />
+          <Controls
+            style={{
+              background: 'rgba(28,32,22,0.9)',
+              border: '1px solid rgba(236,223,204,0.12)',
+              borderRadius: '6px'
+            }}
+          />
           <MiniMap
             style={{ background: 'rgba(24,28,20,0.9)', border: '1px solid rgba(236,223,204,0.1)' }}
             nodeColor={(n) => (n.data as ParamNodeData)?.accentColor ?? '#3C3D37'}
@@ -632,7 +2171,17 @@ function ParameterFlowCanvas() {
       </div>
 
       {/* Right edit panel */}
-      <div style={{ width: '270px', flexShrink: 0, background: 'rgba(24,28,20,0.96)', borderLeft: '1px solid rgba(236,223,204,0.08)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          width: '270px',
+          flexShrink: 0,
+          background: 'rgba(24,28,20,0.96)',
+          borderLeft: '1px solid rgba(236,223,204,0.08)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
         <EditPanel
           node={selectedNode}
           onFieldChange={handleFieldChange}

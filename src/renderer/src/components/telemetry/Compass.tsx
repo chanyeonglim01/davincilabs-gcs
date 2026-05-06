@@ -68,10 +68,50 @@ export function Compass(): React.ReactElement {
           })}
 
           {/* Cardinal directions */}
-          <text x="100" y="30" textAnchor="middle" dominantBaseline="middle" fill="#22c55e" fontSize="20" fontWeight="bold">N</text>
-          <text x="170" y="100" textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="18" fontWeight="bold">E</text>
-          <text x="100" y="175" textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="18" fontWeight="bold">S</text>
-          <text x="30" y="100" textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="18" fontWeight="bold">W</text>
+          <text
+            x="100"
+            y="30"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#22c55e"
+            fontSize="20"
+            fontWeight="bold"
+          >
+            N
+          </text>
+          <text
+            x="170"
+            y="100"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#fff"
+            fontSize="18"
+            fontWeight="bold"
+          >
+            E
+          </text>
+          <text
+            x="100"
+            y="175"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#fff"
+            fontSize="18"
+            fontWeight="bold"
+          >
+            S
+          </text>
+          <text
+            x="30"
+            y="100"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#fff"
+            fontSize="18"
+            fontWeight="bold"
+          >
+            W
+          </text>
 
           {/* Degree labels */}
           {[30, 60, 120, 150, 210, 240, 300, 330].map((deg) => {
@@ -79,7 +119,15 @@ export function Compass(): React.ReactElement {
             const x = 100 + r * Math.sin((deg * Math.PI) / 180)
             const y = 100 - r * Math.cos((deg * Math.PI) / 180)
             return (
-              <text key={`deg-${deg}`} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fill="#9ca3af" fontSize="11">
+              <text
+                key={`deg-${deg}`}
+                x={x}
+                y={y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill="#9ca3af"
+                fontSize="11"
+              >
                 {deg}
               </text>
             )
@@ -96,7 +144,9 @@ export function Compass(): React.ReactElement {
         <circle cx="100" cy="100" r="4" fill="#2d3748" stroke="#fbbf24" strokeWidth="2" />
 
         {/* Label */}
-        <text x="100" y="150" textAnchor="middle" fill="#9ca3af" fontSize="10" fontWeight="bold">HEADING</text>
+        <text x="100" y="150" textAnchor="middle" fill="#9ca3af" fontSize="10" fontWeight="bold">
+          HEADING
+        </text>
       </svg>
 
       {/* Digital readout */}

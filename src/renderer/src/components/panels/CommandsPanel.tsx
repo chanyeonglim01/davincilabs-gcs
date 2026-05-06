@@ -88,12 +88,8 @@ export function CommandsPanel() {
                 ? '1px solid rgba(236, 223, 204, 0.35)'
                 : '1px solid rgba(236, 223, 204, 0.18)',
               borderRadius: '3px',
-              background: cmd.danger
-                ? 'rgba(60, 61, 55, 0.6)'
-                : 'rgba(60, 61, 55, 0.4)',
-              color: cmd.danger
-                ? 'rgba(236, 223, 204, 0.9)'
-                : 'rgba(236, 223, 204, 0.75)',
+              background: cmd.danger ? 'rgba(60, 61, 55, 0.6)' : 'rgba(60, 61, 55, 0.4)',
+              color: cmd.danger ? 'rgba(236, 223, 204, 0.9)' : 'rgba(236, 223, 204, 0.75)',
               cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s ease',
               textTransform: 'uppercase'

@@ -59,9 +59,7 @@ function groupParams(params: Record<string, ParamEntry>): Map<string, ParamEntry
   const assigned = new Set<string>()
 
   for (const [groupName, ids] of Object.entries(PID_GROUPS)) {
-    const matched = ids
-      .map((id) => params[id])
-      .filter((p): p is ParamEntry => p !== undefined)
+    const matched = ids.map((id) => params[id]).filter((p): p is ParamEntry => p !== undefined)
     if (matched.length > 0) {
       groups.set(groupName, matched)
       matched.forEach((p) => assigned.add(p.id))
@@ -77,7 +75,10 @@ function groupParams(params: Record<string, ParamEntry>): Map<string, ParamEntry
     prefixBuckets.get(prefix)!.push(param)
   }
   for (const [prefix, entries] of prefixBuckets) {
-    groups.set(prefix, entries.sort((a, b) => a.id.localeCompare(b.id)))
+    groups.set(
+      prefix,
+      entries.sort((a, b) => a.id.localeCompare(b.id))
+    )
   }
 
   return groups

@@ -92,9 +92,7 @@ export function CommandButtons() {
             <DialogHeader>
               <DialogTitle>Confirm {confirmDialog.type}</DialogTitle>
             </DialogHeader>
-            <p className="text-gray-300">
-              Are you sure you want to execute {confirmDialog.type}?
-            </p>
+            <p className="text-gray-300">Are you sure you want to execute {confirmDialog.type}?</p>
             <DialogFooter>
               <Button
                 variant="outline"

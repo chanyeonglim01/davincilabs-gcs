@@ -12,22 +12,22 @@
 
 import dgram from 'dgram'
 
-const DRONE_PORT = 14551  // simulator listens here
-const GCS_PORT   = 14550  // GCS listens here
-const GCS_HOST   = '127.0.0.1'
+const DRONE_PORT = 14551 // simulator listens here
+const GCS_PORT = 14550 // GCS listens here
+const GCS_HOST = '127.0.0.1'
 
 // ─── MAVLink v2 constants ─────────────────────────────────────────────────────
-const SYS_ID  = 1
+const SYS_ID = 1
 const COMP_ID = 1
 
-const MSGID_HEARTBEAT           = 0
+const MSGID_HEARTBEAT = 0
 const MSGID_MISSION_REQUEST_INT = 51
-const MSGID_MISSION_ACK         = 47
+const MSGID_MISSION_ACK = 47
 
 const CRC_EXTRA = {
-  0:  50,  // HEARTBEAT
+  0: 50, // HEARTBEAT
   51: 196, // MISSION_REQUEST_INT
-  47: 153, // MISSION_ACK
+  47: 153 // MISSION_ACK
 }
 
 let seq = 0
@@ -55,8 +55,8 @@ function buildPacket(msgid, payload) {
   hdr[4] = seq++ & 0xff
   hdr[5] = SYS_ID
   hdr[6] = COMP_ID
-  hdr[7] =  msgid        & 0xff
-  hdr[8] = (msgid >> 8)  & 0xff
+  hdr[7] = msgid & 0xff
+  hdr[8] = (msgid >> 8) & 0xff
   hdr[9] = (msgid >> 16) & 0xff
 
   const crcInput = Buffer.concat([hdr.subarray(1), payload])
@@ -67,14 +67,21 @@ function buildPacket(msgid, payload) {
 }
 
 // ─── HEARTBEAT ────────────────────────────────────────────────────────────────
+// UAM custom_mode bit layout (see customModes.ts §1.5):
+//   bits 0..7  flight_mode  (1=Auto)
+//   bits 8..15 flight_state (2=FixedWing)
+//   bits 16..23 sub_state   (2=AUTO.MISSION)
+// Encoded value for AUTO.MISSION: 1 | (2 << 8) | (2 << 16) = 0x020201 = 131585
+const UAM_CUSTOM_MODE_AUTO_MISSION = 1 | (2 << 8) | (2 << 16)
+
 function buildHeartbeat() {
   const p = Buffer.alloc(9)
-  p.writeUInt32LE(2, 0)   // custom_mode=2 (PX4 Mission mode)
-  p.writeUInt8(1, 4)       // type=1 (MAV_TYPE_FIXED_WING placeholder)
-  p.writeUInt8(3, 5)       // autopilot=3 (MAV_AUTOPILOT_ARDUPILOTMEGA placeholder)
-  p.writeUInt8(0b11000001, 6) // base_mode: armed + guided + custom
-  p.writeUInt8(4, 7)       // system_status=4 (MAV_STATE_ACTIVE)
-  p.writeUInt8(3, 8)       // mavlink_version=3
+  p.writeUInt32LE(UAM_CUSTOM_MODE_AUTO_MISSION, 0)
+  p.writeUInt8(22, 4) // type=22 MAV_TYPE_VTOL_QUADROTOR (Lift & Cruise)
+  p.writeUInt8(0, 5) // autopilot=0 MAV_AUTOPILOT_GENERIC (UAM is not PX4)
+  p.writeUInt8(0b10000001, 6) // base_mode: SAFETY_ARMED | CUSTOM_MODE_ENABLED
+  p.writeUInt8(4, 7) // system_status=4 MAV_STATE_ACTIVE
+  p.writeUInt8(3, 8) // mavlink_version=3
   return buildPacket(MSGID_HEARTBEAT, p)
 }
 
@@ -82,7 +89,7 @@ function buildHeartbeat() {
 function buildMissionRequestInt(seq, targetSys = 255, targetComp = 190) {
   const p = Buffer.alloc(5)
   p.writeUInt16LE(seq, 0)
-  p.writeUInt8(targetSys,  2)
+  p.writeUInt8(targetSys, 2)
   p.writeUInt8(targetComp, 3)
   p.writeUInt8(0, 4) // MAV_MISSION_TYPE_MISSION
   return buildPacket(MSGID_MISSION_REQUEST_INT, p)
@@ -91,10 +98,10 @@ function buildMissionRequestInt(seq, targetSys = 255, targetComp = 190) {
 // ─── MISSION_ACK ─────────────────────────────────────────────────────────────
 function buildMissionAck(type = 0, targetSys = 255, targetComp = 190) {
   const p = Buffer.alloc(4)
-  p.writeUInt8(targetSys,  0)
+  p.writeUInt8(targetSys, 0)
   p.writeUInt8(targetComp, 1)
   p.writeUInt8(type, 2) // MAV_MISSION_RESULT (0=accepted)
-  p.writeUInt8(0, 3)    // MAV_MISSION_TYPE_MISSION
+  p.writeUInt8(0, 3) // MAV_MISSION_TYPE_MISSION
   return buildPacket(MSGID_MISSION_ACK, p)
 }
 
@@ -122,7 +129,7 @@ function parsePackets(buf) {
 class MissionSimulator {
   constructor(socket) {
     this.socket = socket
-    this.state = 'idle'       // idle | clearing | counting | receiving | done
+    this.state = 'idle' // idle | clearing | counting | receiving | done
     this.totalCount = 0
     this.nextSeq = 0
     this.receivedItems = []
@@ -138,7 +145,8 @@ class MissionSimulator {
         this.receivedItems = []
         break
 
-      case 44: { // MISSION_COUNT
+      case 44: {
+        // MISSION_COUNT
         const count = packet.readUInt16LE(10)
         console.log(`[SIM] ← MISSION_COUNT: ${count} items`)
         this.totalCount = count
@@ -148,14 +156,17 @@ class MissionSimulator {
         break
       }
 
-      case 73: { // MISSION_ITEM_INT
+      case 73: {
+        // MISSION_ITEM_INT
         const itemSeq = packet.readUInt16LE(28)
-        const cmd     = packet.readUInt16LE(30)
-        const frame   = packet.readUInt8(34)
-        const lat     = packet.readInt32LE(16) / 1e7
-        const lon     = packet.readInt32LE(20) / 1e7
-        const alt     = packet.readFloatLE(24)
-        console.log(`[SIM] ← ITEM[${itemSeq}] cmd=${cmd} frame=${frame} lat=${lat.toFixed(5)} lon=${lon.toFixed(5)} alt=${alt.toFixed(1)}m`)
+        const cmd = packet.readUInt16LE(30)
+        const frame = packet.readUInt8(34)
+        const lat = packet.readInt32LE(16) / 1e7
+        const lon = packet.readInt32LE(20) / 1e7
+        const alt = packet.readFloatLE(24)
+        console.log(
+          `[SIM] ← ITEM[${itemSeq}] cmd=${cmd} frame=${frame} lat=${lat.toFixed(5)} lon=${lon.toFixed(5)} alt=${alt.toFixed(1)}m`
+        )
         this.receivedItems[itemSeq] = { cmd, frame, lat, lon, alt }
 
         if (itemSeq < this.totalCount - 1) {
@@ -190,12 +201,20 @@ class MissionSimulator {
     console.log('║      MISSION UPLOAD SUCCESSFUL       ║')
     console.log('╠══════════════════════════════════════╣')
     this.receivedItems.forEach((item, i) => {
-      const cmdName = {
-        16: 'WAYPOINT', 17: 'LOITER', 20: 'RTL',
-        21: 'LAND', 22: 'TAKEOFF', 84: 'VTOL_TAKEOFF',
-        85: 'VTOL_LAND', 3000: 'VTOL_TRANSITION'
-      }[item.cmd] || `CMD_${item.cmd}`
-      console.log(`║  [${String(i).padStart(2)}] ${cmdName.padEnd(18)} alt=${String(item.alt.toFixed(1)).padStart(6)}m ║`)
+      const cmdName =
+        {
+          16: 'WAYPOINT',
+          17: 'LOITER',
+          20: 'RTL',
+          21: 'LAND',
+          22: 'TAKEOFF',
+          84: 'VTOL_TAKEOFF',
+          85: 'VTOL_LAND',
+          3000: 'VTOL_TRANSITION'
+        }[item.cmd] || `CMD_${item.cmd}`
+      console.log(
+        `║  [${String(i).padStart(2)}] ${cmdName.padEnd(18)} alt=${String(item.alt.toFixed(1)).padStart(6)}m ║`
+      )
     })
     console.log('╚══════════════════════════════════════╝\n')
   }

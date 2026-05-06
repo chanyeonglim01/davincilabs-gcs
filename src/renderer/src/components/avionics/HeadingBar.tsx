@@ -32,7 +32,9 @@ export function HeadingBar(): React.ReactElement {
       accPxRef.current = headingRounded * PX_PER_DEG + TAPE_PX
       div.style.transition = 'none'
       div.style.left = `calc(50% - ${accPxRef.current}px)`
-      requestAnimationFrame(() => { div.style.transition = 'left 0.12s linear' })
+      requestAnimationFrame(() => {
+        div.style.transition = 'left 0.12s linear'
+      })
       return
     }
 

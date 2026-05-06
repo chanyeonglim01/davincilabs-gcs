@@ -1,9 +1,9 @@
 import * as Cesium from 'cesium'
 
 export const DRONE_MODEL_URI = '/models/drone.glb'
-export const DRONE_MODEL_SCALE = 0.01          // 극소 world-space → minimumPixelSize가 항상 적용됨
-export const DRONE_MIN_PIXEL_SIZE = 130        // 화면 고정 픽셀 크기 (줌 무관)
-export const DRONE_MAX_SCALE = 500000          // minimumPixelSize 스케일 업 상한
+export const DRONE_MODEL_SCALE = 0.01 // 극소 world-space → minimumPixelSize가 항상 적용됨
+export const DRONE_MIN_PIXEL_SIZE = 130 // 화면 고정 픽셀 크기 (줌 무관)
+export const DRONE_MAX_SCALE = 500000 // minimumPixelSize 스케일 업 상한
 export const MODEL_HEADING_OFFSET_DEG = 180
 
 export function computeDroneOrientation(

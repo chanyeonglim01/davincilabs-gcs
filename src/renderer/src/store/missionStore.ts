@@ -47,7 +47,7 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
 
   setWaypoints: (wps) =>
     set((state) => ({
-      waypoints: typeof wps === 'function' ? wps(state.waypoints) : wps,
+      waypoints: typeof wps === 'function' ? wps(state.waypoints) : wps
     })),
 
   setDefaultAlt: (alt) => set({ defaultAlt: alt }),
@@ -60,5 +60,5 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
 
   clearMission: () => set({ waypoints: [], uidCounter: 1, designMode: 'none' }),
 
-  setDesignMode: (mode) => set({ designMode: mode }),
+  setDesignMode: (mode) => set({ designMode: mode })
 }))

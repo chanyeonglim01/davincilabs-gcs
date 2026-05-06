@@ -3,19 +3,19 @@
 // Pure function — no side effects.
 
 export interface SurveyGridParams {
-  spacing: number    // metres between sweep lines (5–500)
-  angle: number      // degrees, 0 = N-S sweeps, 90 = E-W sweeps
-  altitude: number   // metres MSL for generated waypoints
-  overshoot: number  // metres to extend each sweep line beyond polygon edge
+  spacing: number // metres between sweep lines (5–500)
+  angle: number // degrees, 0 = N-S sweeps, 90 = E-W sweeps
+  altitude: number // metres MSL for generated waypoints
+  overshoot: number // metres to extend each sweep line beyond polygon edge
 }
 
 export interface SurveyGridResult {
   waypoints: { lat: number; lon: number }[]
-  totalDistance: number  // metres (sum of segment lengths)
+  totalDistance: number // metres (sum of segment lengths)
 }
 
 const DEG2RAD = Math.PI / 180
-const R_EARTH = 6371000  // metres
+const R_EARTH = 6371000 // metres
 
 // Convert (lat, lon) to local (x_m, y_m) relative to origin
 function toLocal(lat: number, lon: number, originLat: number, originLon: number): [number, number] {
@@ -26,8 +26,8 @@ function toLocal(lat: number, lon: number, originLat: number, originLon: number)
 
 // Convert local (x_m, y_m) back to (lat, lon)
 function fromLocal(x: number, y: number, originLat: number, originLon: number): [number, number] {
-  const lat = originLat + (y / R_EARTH) / DEG2RAD
-  const lon = originLon + (x / (R_EARTH * Math.cos(originLat * DEG2RAD))) / DEG2RAD
+  const lat = originLat + y / R_EARTH / DEG2RAD
+  const lon = originLon + x / (R_EARTH * Math.cos(originLat * DEG2RAD)) / DEG2RAD
   return [lat, lon]
 }
 
@@ -41,9 +41,11 @@ function rotate(x: number, y: number, angleDeg: number): [number, number] {
 // Segment intersection: returns x-coordinate of intersection of horizontal line y=ySweep
 // with edge (x1,y1)→(x2,y2), or null if no crossing.
 function sweepIntersect(
-  x1: number, y1: number,
-  x2: number, y2: number,
-  ySweep: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  ySweep: number
 ): number | null {
   if ((y1 <= ySweep && y2 > ySweep) || (y2 <= ySweep && y1 > ySweep)) {
     const t = (ySweep - y1) / (y2 - y1)
@@ -53,8 +55,8 @@ function sweepIntersect(
 }
 
 export function generateSurveyGrid(
-  polygon: [number, number][],  // [lat, lon][]
-  params: SurveyGridParams,
+  polygon: [number, number][], // [lat, lon][]
+  params: SurveyGridParams
 ): SurveyGridResult {
   if (polygon.length < 3) return { waypoints: [], totalDistance: 0 }
 
@@ -109,18 +111,18 @@ export function generateSurveyGrid(
 
     // Pair up entry/exit crossings (even-odd rule)
     for (let i = 0; i < xCrossings.length - 1; i += 2) {
-      const xLeft  = xCrossings[i]     - params.overshoot
+      const xLeft = xCrossings[i] - params.overshoot
       const xRight = xCrossings[i + 1] + params.overshoot
-      const xClampLeft  = Math.max(xLeft,  minX - params.overshoot)
+      const xClampLeft = Math.max(xLeft, minX - params.overshoot)
       const xClampRight = Math.min(xRight, maxX + params.overshoot)
 
       // Boustrophedon: alternate direction
       if (li % 2 === 0) {
-        waypointsLocal.push([xClampLeft,  ySweep])
+        waypointsLocal.push([xClampLeft, ySweep])
         waypointsLocal.push([xClampRight, ySweep])
       } else {
         waypointsLocal.push([xClampRight, ySweep])
-        waypointsLocal.push([xClampLeft,  ySweep])
+        waypointsLocal.push([xClampLeft, ySweep])
       }
     }
   }
@@ -135,7 +137,7 @@ export function generateSurveyGrid(
     const [lat, lon] = fromLocal(lx, ly, originLat, originLon)
     return {
       lat: parseFloat(lat.toFixed(7)),
-      lon: parseFloat(lon.toFixed(7)),
+      lon: parseFloat(lon.toFixed(7))
     }
   })
 

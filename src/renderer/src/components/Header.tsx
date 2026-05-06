@@ -1,11 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import logoSrc from '@renderer/assets/images/dl_logo.png'
+import type { LinkState, SerialPortInfo } from '@renderer/types'
 
 type ConnMode = 'udp' | 'com'
 export type ViewType = 'main' | 'mission' | 'parameter'
-
-const COM_PORTS = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8']
 
 const VIEW_LABELS: Record<ViewType, string> = {
   main: 'MAIN',
@@ -13,42 +12,140 @@ const VIEW_LABELS: Record<ViewType, string> = {
   parameter: 'PARAMETER'
 }
 
+const BAUDRATES = [9600, 57600, 115200, 230400, 921600] as const
+type Baudrate = (typeof BAUDRATES)[number]
+
+const SERIAL_REFRESH_MS = 30_000
+
+// Five-state link styling. Status colors are scoped to link visualization
+// (black/cream design system stays untouched everywhere else).
+interface LinkStyle {
+  dot: string
+  glow: string | null
+  text: string
+}
+
+const LINK_STYLES: Record<LinkState, LinkStyle> = {
+  DISCONNECTED: {
+    dot: 'rgba(236, 223, 204, 0.2)',
+    glow: null,
+    text: 'rgba(236, 223, 204, 0.3)'
+  },
+  WAITING_HEARTBEAT: {
+    dot: '#F0C674',
+    glow: '0 0 8px rgba(240, 198, 116, 0.65)',
+    text: '#F0C674'
+  },
+  LINKED: {
+    dot: '#00FF88',
+    glow: '0 0 8px rgba(0, 255, 136, 0.7)',
+    text: '#00FF88'
+  },
+  STALE: {
+    dot: '#E06C75',
+    glow: '0 0 8px rgba(224, 108, 117, 0.7)',
+    text: '#E06C75'
+  },
+  ERROR: {
+    dot: '#E06C75',
+    glow: '0 0 10px rgba(224, 108, 117, 0.85)',
+    text: '#E06C75'
+  }
+}
+
+function linkLabel(state: LinkState, host: string, port: number): string {
+  switch (state) {
+    case 'LINKED':
+      return `LINKED ${host}:${port}`
+    case 'WAITING_HEARTBEAT':
+      return 'WAITING'
+    case 'STALE':
+      return 'NO HEARTBEAT'
+    case 'ERROR':
+      return 'ERROR'
+    case 'DISCONNECTED':
+    default:
+      return 'NO LINK'
+  }
+}
+
 interface HeaderProps {
   currentView: ViewType
   onViewChange: (view: ViewType) => void
 }
 
-export function Header({ currentView, onViewChange }: HeaderProps) {
+export function Header({ currentView, onViewChange }: HeaderProps): React.JSX.Element {
   const { connection } = useTelemetryStore()
+  const linkState: LinkState = connection.linkState ?? 'DISCONNECTED'
+  const isLinked = linkState === 'LINKED'
+  const isTransportOpen = isLinked || linkState === 'WAITING_HEARTBEAT' || linkState === 'STALE'
+  // Inputs lock once a transport is open. ERROR/DISCONNECTED keep them editable.
+  const inputsLocked = isTransportOpen
+
   const [mode, setMode] = useState<ConnMode>('udp')
   const [udpHost, setUdpHost] = useState('127.0.0.1')
   const [udpPort, setUdpPort] = useState('14551')
-  const [comPort, setComPort] = useState('COM1')
   const [comOpen, setComOpen] = useState(false)
+  const [baudOpen, setBaudOpen] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+  const [serialPorts, setSerialPorts] = useState<SerialPortInfo[]>([])
+  const [serialRefreshing, setSerialRefreshing] = useState(false)
+  const [comPort, setComPort] = useState<string>('')
+  const [baudrate, setBaudrate] = useState<Baudrate>(115200)
   const navRef = useRef<HTMLDivElement>(null)
+  const comRef = useRef<HTMLDivElement>(null)
+  const baudRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) {
-        setNavOpen(false)
-      }
+    const handleClick = (e: MouseEvent): void => {
+      const t = e.target as Node
+      if (navRef.current && !navRef.current.contains(t)) setNavOpen(false)
+      if (comRef.current && !comRef.current.contains(t)) setComOpen(false)
+      if (baudRef.current && !baudRef.current.contains(t)) setBaudOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Sync input fields when auto-connect sets a different host/port
+  // Sync input fields when auto-connect or main process picks a different host/port
   useEffect(() => {
-    if (connection.connected) {
+    if (isTransportOpen) {
       setUdpHost(connection.host)
       setUdpPort(String(connection.port))
     }
-  }, [connection.connected, connection.host, connection.port])
+  }, [isTransportOpen, connection.host, connection.port])
 
-  const handleConnectionToggle = async () => {
-    if (connection.connected) {
+  const refreshSerialPorts = useCallback(async () => {
+    if (!window.mavlink?.listSerialPorts) return
+    setSerialRefreshing(true)
+    try {
+      const ports = await window.mavlink.listSerialPorts()
+      setSerialPorts(ports)
+      // Auto-select first port if none selected, or clear if previous vanished
+      setComPort((prev) => {
+        if (ports.length === 0) return ''
+        if (prev && ports.some((p) => p.path === prev)) return prev
+        return ports[0].path
+      })
+    } catch (err) {
+      console.error('[Header] listSerialPorts error:', err)
+    } finally {
+      setSerialRefreshing(false)
+    }
+  }, [])
+
+  // Initial enumeration + 30s polling
+  useEffect(() => {
+    void refreshSerialPorts()
+    const id = setInterval(() => {
+      void refreshSerialPorts()
+    }, SERIAL_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [refreshSerialPorts])
+
+  const handleConnectionToggle = async (): Promise<void> => {
+    if (isTransportOpen) {
       setConnecting(true)
       try {
         await window.mavlink?.disconnect()
@@ -57,23 +154,38 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
       } finally {
         setConnecting(false)
       }
-    } else {
-      if (mode !== 'udp') return
-      const port = parseInt(udpPort, 10)
-      if (isNaN(port)) return
-      setConnecting(true)
-      try {
-        const result = await window.mavlink?.reconnect({ host: udpHost, port })
-        if (result && !result.success) {
-          console.error('[Header] reconnect failed:', result.error)
-        }
-      } catch (e) {
-        console.error('[Header] reconnect error:', e)
-      } finally {
-        setConnecting(false)
+      return
+    }
+
+    if (mode === 'com') {
+      // Serial transport not yet implemented — surface a clear message.
+      const target = comPort ? `${comPort} @ ${baudrate} baud` : 'serial device'
+      window.alert(
+        `Serial transport not implemented yet (selected ${target}). ` + `Use UDP for now.`
+      )
+      return
+    }
+
+    const port = parseInt(udpPort, 10)
+    if (Number.isNaN(port)) return
+    setConnecting(true)
+    try {
+      const result = await window.mavlink?.reconnect({ host: udpHost, port })
+      if (result && !result.success) {
+        console.error('[Header] reconnect failed:', result.error)
       }
+    } catch (e) {
+      console.error('[Header] reconnect error:', e)
+    } finally {
+      setConnecting(false)
     }
   }
+
+  const linkStyle = LINK_STYLES[linkState]
+  const labelText = useMemo(
+    () => linkLabel(linkState, connection.host, connection.port),
+    [linkState, connection.host, connection.port]
+  )
 
   const inputStyle: React.CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
@@ -85,8 +197,8 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
     padding: '4px 8px',
     outline: 'none',
     width: '100%',
-    opacity: connection.connected ? 0.4 : 1,
-    pointerEvents: connection.connected ? 'none' : 'auto'
+    opacity: inputsLocked ? 0.4 : 1,
+    pointerEvents: inputsLocked ? 'none' : 'auto'
   }
 
   const connTabStyle = (active: boolean): React.CSSProperties => ({
@@ -126,8 +238,10 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
       }}
     >
       {/* Left: Logo + Nav Dropdown */}
-      <div ref={navRef} style={{ display: 'flex', alignItems: 'center', flexShrink: 0, position: 'relative' }}>
-        {/* Logo — clickable */}
+      <div
+        ref={navRef}
+        style={{ display: 'flex', alignItems: 'center', flexShrink: 0, position: 'relative' }}
+      >
         <div
           onClick={() => setNavOpen((v) => !v)}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
@@ -137,7 +251,6 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
             alt="DavinciLabs"
             style={{ height: '88px', width: 'auto', objectFit: 'contain' }}
           />
-          {/* Current view indicator */}
           {currentView !== 'main' && (
             <span
               style={{
@@ -158,7 +271,6 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
           )}
         </div>
 
-        {/* Dropdown */}
         {navOpen && (
           <div
             style={{
@@ -192,20 +304,19 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
                   color: v === currentView ? '#ECDFCC' : 'rgba(236, 223, 204, 0.45)',
                   background: v === currentView ? 'rgba(236, 223, 204, 0.08)' : 'transparent',
                   cursor: 'pointer',
-                  borderLeft: v === currentView
-                    ? '2px solid #ECDFCC'
-                    : '2px solid transparent',
+                  borderLeft: v === currentView ? '2px solid #ECDFCC' : '2px solid transparent',
                   transition: 'all 0.1s ease'
                 }}
                 onMouseEnter={(e) => {
                   if (v !== currentView) {
-                    (e.currentTarget as HTMLDivElement).style.background = 'rgba(236, 223, 204, 0.05)'
+                    ;(e.currentTarget as HTMLDivElement).style.background =
+                      'rgba(236, 223, 204, 0.05)'
                     ;(e.currentTarget as HTMLDivElement).style.color = 'rgba(236, 223, 204, 0.75)'
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (v !== currentView) {
-                    (e.currentTarget as HTMLDivElement).style.background = 'transparent'
+                    ;(e.currentTarget as HTMLDivElement).style.background = 'transparent'
                     ;(e.currentTarget as HTMLDivElement).style.color = 'rgba(236, 223, 204, 0.45)'
                   }
                 }}
@@ -235,43 +346,56 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
       </div>
 
       {/* Right: Connection Panel */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          flexShrink: 0
-        }}
-      >
-        {/* Status indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+        {/* 5-state link indicator */}
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: '7px' }}
+          title={
+            linkState === 'ERROR' && connection.error ? `ERROR: ${connection.error}` : labelText
+          }
+        >
           <div
             style={{
               width: '7px',
               height: '7px',
               borderRadius: '50%',
-              background: connection.connected ? '#00FF88' : 'rgba(236, 223, 204, 0.2)',
-              boxShadow: connection.connected ? '0 0 8px rgba(0, 255, 136, 0.7)' : 'none',
-              transition: 'all 0.3s ease'
+              background: linkStyle.dot,
+              boxShadow: linkStyle.glow ?? 'none',
+              transition: 'all 0.3s ease',
+              animation:
+                linkState === 'WAITING_HEARTBEAT'
+                  ? 'dl-link-pulse 1.4s ease-in-out infinite'
+                  : 'none'
             }}
           />
           <span
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: '11px',
-              color: connection.connected ? '#00FF88' : 'rgba(236, 223, 204, 0.3)',
+              color: linkStyle.text,
               letterSpacing: '0.04em',
-              transition: 'color 0.3s ease'
+              transition: 'color 0.3s ease',
+              maxWidth: '240px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
             }}
           >
-            {connection.connected ? `${connection.host}:${connection.port}` : 'NO LINK'}
+            {labelText}
           </span>
         </div>
 
         <div style={{ width: '1px', height: '20px', background: 'rgba(236, 223, 204, 0.1)' }} />
 
         {/* Mode tabs */}
-        <div style={{ display: 'flex', gap: '4px', opacity: connection.connected ? 0.4 : 1, pointerEvents: connection.connected ? 'none' : 'auto' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '4px',
+            opacity: inputsLocked ? 0.4 : 1,
+            pointerEvents: inputsLocked ? 'none' : 'auto'
+          }}
+        >
           <button style={connTabStyle(mode === 'udp')} onClick={() => setMode('udp')}>
             UDP
           </button>
@@ -301,70 +425,197 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
           </div>
         )}
 
-        {/* COM port selector */}
+        {/* COM port + baud */}
         {mode === 'com' && (
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setComOpen((v) => !v)}
-              style={{
-                ...inputStyle,
-                width: '90px',
-                cursor: 'pointer',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                border: comOpen
-                  ? '1px solid rgba(236, 223, 204, 0.4)'
-                  : '1px solid rgba(236, 223, 204, 0.15)'
-              }}
-            >
-              <span>{comPort}</span>
-              <span style={{ opacity: 0.4, fontSize: '9px' }}>▼</span>
-            </button>
-            {comOpen && (
-              <div
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {/* Serial port dropdown */}
+            <div ref={comRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setComOpen((v) => !v)}
                 style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 4px)',
-                  left: 0,
+                  ...inputStyle,
                   width: '90px',
-                  background: '#1e2218',
-                  border: '1px solid rgba(236, 223, 204, 0.2)',
-                  borderRadius: '4px',
-                  overflow: 'hidden',
-                  zIndex: 200,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  border: comOpen
+                    ? '1px solid rgba(236, 223, 204, 0.4)'
+                    : '1px solid rgba(236, 223, 204, 0.15)'
                 }}
+                title={comPort || 'No serial devices found'}
               >
-                {COM_PORTS.map((p) => (
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    textAlign: 'left',
+                    color: comPort ? '#ECDFCC' : 'rgba(236, 223, 204, 0.4)'
+                  }}
+                >
+                  {comPort || (serialPorts.length === 0 ? 'NO DEVICES' : 'Select port')}
+                </span>
+                <span style={{ opacity: 0.4, fontSize: '9px', marginLeft: '6px' }}>▼</span>
+              </button>
+
+              {comOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    left: 0,
+                    width: '120px',
+                    background: '#1e2218',
+                    border: '1px solid rgba(236, 223, 204, 0.2)',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    zIndex: 200,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+                  }}
+                >
+                  {/* Refresh row */}
                   <div
-                    key={p}
-                    onClick={() => {
-                      setComPort(p)
-                      setComOpen(false)
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void refreshSerialPorts()
                     }}
                     style={{
                       fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: '11px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
                       padding: '6px 10px',
-                      color: p === comPort ? '#ECDFCC' : 'rgba(236, 223, 204, 0.5)',
-                      background: p === comPort ? 'rgba(236, 223, 204, 0.08)' : 'transparent',
-                      cursor: 'pointer'
-                    }}
-                    onMouseEnter={(e) => {
-                      ;(e.currentTarget as HTMLDivElement).style.background =
-                        'rgba(236, 223, 204, 0.08)'
-                    }}
-                    onMouseLeave={(e) => {
-                      ;(e.currentTarget as HTMLDivElement).style.background =
-                        p === comPort ? 'rgba(236, 223, 204, 0.08)' : 'transparent'
+                      color: 'rgba(236, 223, 204, 0.55)',
+                      background: 'rgba(236, 223, 204, 0.04)',
+                      borderBottom: '1px solid rgba(236, 223, 204, 0.08)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
                     }}
                   >
-                    {p}
+                    <span>{serialRefreshing ? 'SCANNING…' : 'REFRESH'}</span>
+                    <span style={{ opacity: 0.5 }}>{serialPorts.length}</span>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  {serialPorts.length === 0 && (
+                    <div
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '11px',
+                        padding: '10px',
+                        color: 'rgba(236, 223, 204, 0.4)',
+                        textAlign: 'center'
+                      }}
+                    >
+                      No serial devices
+                    </div>
+                  )}
+
+                  {serialPorts.map((p) => (
+                    <div
+                      key={p.path}
+                      onClick={() => {
+                        setComPort(p.path)
+                        setComOpen(false)
+                      }}
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '11px',
+                        padding: '6px 10px',
+                        color: p.path === comPort ? '#ECDFCC' : 'rgba(236, 223, 204, 0.5)',
+                        background:
+                          p.path === comPort ? 'rgba(236, 223, 204, 0.08)' : 'transparent',
+                        cursor: 'pointer',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title={p.friendlyName ?? p.path}
+                      onMouseEnter={(e) => {
+                        ;(e.currentTarget as HTMLDivElement).style.background =
+                          'rgba(236, 223, 204, 0.08)'
+                      }}
+                      onMouseLeave={(e) => {
+                        ;(e.currentTarget as HTMLDivElement).style.background =
+                          p.path === comPort ? 'rgba(236, 223, 204, 0.08)' : 'transparent'
+                      }}
+                    >
+                      {p.friendlyName ?? p.path}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Baudrate dropdown */}
+            <div ref={baudRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setBaudOpen((v) => !v)}
+                style={{
+                  ...inputStyle,
+                  width: '88px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  border: baudOpen
+                    ? '1px solid rgba(236, 223, 204, 0.4)'
+                    : '1px solid rgba(236, 223, 204, 0.15)'
+                }}
+                title={`Baudrate ${baudrate}`}
+              >
+                <span>{baudrate}</span>
+                <span style={{ opacity: 0.4, fontSize: '9px' }}>▼</span>
+              </button>
+              {baudOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    left: 0,
+                    width: '88px',
+                    background: '#1e2218',
+                    border: '1px solid rgba(236, 223, 204, 0.2)',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    zIndex: 200,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+                  }}
+                >
+                  {BAUDRATES.map((b) => (
+                    <div
+                      key={b}
+                      onClick={() => {
+                        setBaudrate(b)
+                        setBaudOpen(false)
+                      }}
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '11px',
+                        padding: '6px 10px',
+                        color: b === baudrate ? '#ECDFCC' : 'rgba(236, 223, 204, 0.5)',
+                        background: b === baudrate ? 'rgba(236, 223, 204, 0.08)' : 'transparent',
+                        cursor: 'pointer'
+                      }}
+                      onMouseEnter={(e) => {
+                        ;(e.currentTarget as HTMLDivElement).style.background =
+                          'rgba(236, 223, 204, 0.08)'
+                      }}
+                      onMouseLeave={(e) => {
+                        ;(e.currentTarget as HTMLDivElement).style.background =
+                          b === baudrate ? 'rgba(236, 223, 204, 0.08)' : 'transparent'
+                      }}
+                    >
+                      {b}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -382,7 +633,7 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
             textTransform: 'uppercase',
             transition: 'all 0.15s ease',
             cursor: connecting ? 'default' : 'pointer',
-            ...(connection.connected
+            ...(isTransportOpen
               ? {
                   border: '1px solid rgba(236, 223, 204, 0.5)',
                   background: connecting ? 'rgba(236, 223, 204, 0.14)' : 'rgba(236, 223, 204, 0.1)',
@@ -390,25 +641,34 @@ export function Header({ currentView, onViewChange }: HeaderProps) {
                 }
               : {
                   border: '1px solid rgba(236, 223, 204, 0.3)',
-                  background: connecting ? 'rgba(236, 223, 204, 0.14)' : 'rgba(236, 223, 204, 0.06)',
+                  background: connecting
+                    ? 'rgba(236, 223, 204, 0.14)'
+                    : 'rgba(236, 223, 204, 0.06)',
                   color: connecting ? 'rgba(236, 223, 204, 0.5)' : '#ECDFCC'
                 })
           }}
           onMouseEnter={(e) => {
             if (!connecting)
-              (e.currentTarget as HTMLButtonElement).style.background =
-                'rgba(236, 223, 204, 0.14)'
+              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(236, 223, 204, 0.14)'
           }}
           onMouseLeave={(e) => {
             if (!connecting)
-              (e.currentTarget as HTMLButtonElement).style.background = connection.connected
+              (e.currentTarget as HTMLButtonElement).style.background = isTransportOpen
                 ? 'rgba(236, 223, 204, 0.1)'
                 : 'rgba(236, 223, 204, 0.06)'
           }}
         >
-          {connecting ? '...' : connection.connected ? 'DISCONNECT' : 'CONNECT'}
+          {connecting ? '...' : isTransportOpen ? 'DISCONNECT' : 'CONNECT'}
         </button>
       </div>
+
+      {/* keyframes for the WAITING pulse */}
+      <style>{`
+        @keyframes dl-link-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.55; transform: scale(0.85); }
+        }
+      `}</style>
     </header>
   )
 }

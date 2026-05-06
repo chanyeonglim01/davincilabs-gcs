@@ -9,7 +9,8 @@ import type {
   ParamEntry,
   ParamProgress,
   LogEntry,
-  HomePosition
+  HomePosition,
+  SerialPortInfo
 } from './types'
 
 declare global {
@@ -17,13 +18,26 @@ declare global {
     mavlink?: {
       // Invoke (Renderer -> Main, returns Promise)
       connect(config: ConnectionConfig): Promise<void>
-      reconnect(config: { host: string; port: number }): Promise<{ success: boolean; error?: string }>
+      reconnect(config: {
+        host: string
+        port: number
+      }): Promise<{ success: boolean; error?: string }>
       disconnect(): Promise<void>
       sendCommand(command: Command): Promise<CommandResult>
       requestParams(): Promise<void>
       setParam(param: ParamEntry): Promise<void>
       getConnectionStatus(): Promise<ConnectionStatus>
-      uploadMission(waypoints: { action: string; lat: number; lon: number; alt: number; acceptRadius: number; loiterRadius: number }[]): Promise<{ success: boolean; count: number; error?: string }>
+      uploadMission(
+        waypoints: {
+          action: string
+          lat: number
+          lon: number
+          alt: number
+          acceptRadius: number
+          loiterRadius: number
+        }[]
+      ): Promise<{ success: boolean; count: number; error?: string }>
+      listSerialPorts(): Promise<SerialPortInfo[]>
 
       // Listen (Main -> Renderer, callback)
       onTelemetryUpdate(callback: (data: TelemetryData) => void): () => void

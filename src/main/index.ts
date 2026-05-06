@@ -26,7 +26,13 @@ import {
   sendLogMessage
 } from './ipc/telemetry'
 import { registerCommandHandlers } from './ipc/commands'
-import { registerParameterHandlers, sendParamValue, sendParamProgress, onParamRequest } from './ipc/parameters'
+import {
+  registerParameterHandlers,
+  sendParamValue,
+  sendParamProgress,
+  onParamRequest
+} from './ipc/parameters'
+import { registerSerialHandlers } from './ipc/serial'
 
 // Store
 import { getConnectionConfig, getWindowBounds, setWindowBounds } from './store'
@@ -58,7 +64,6 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
-
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -145,6 +150,20 @@ function initializeMavlink(): void {
   })
 
   connection.on('heartbeatTimeout', () => {
+    parser.markStale()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('connection-status', connection.getStatus())
+    }
+  })
+
+  connection.on('heartbeatRecovered', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('connection-status', connection.getStatus())
+    }
+  })
+
+  // Single canonical broadcast for any 5-state lifecycle transition.
+  connection.on('linkStateChanged', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('connection-status', connection.getStatus())
     }
@@ -153,6 +172,9 @@ function initializeMavlink(): void {
   connection.on('error', (err) => {
     console.error('[Main] MAVLink connection error:', err)
     sendLogMessage('error', `MAVLink error: ${err.message}`)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('connection-status', connection.getStatus())
+    }
   })
 
   // Auto-connect in Simulink mode
@@ -178,8 +200,7 @@ app.whenReady().then(() => {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const headers = details.responseHeaders ?? {}
     const hasCorHeader =
-      'access-control-allow-origin' in headers ||
-      'Access-Control-Allow-Origin' in headers
+      'access-control-allow-origin' in headers || 'Access-Control-Allow-Origin' in headers
     if (hasCorHeader) {
       callback({})
     } else {
@@ -196,6 +217,7 @@ app.whenReady().then(() => {
     registerTelemetryHandlers(mainWindow)
     registerCommandHandlers()
     registerParameterHandlers(mainWindow)
+    registerSerialHandlers()
 
     // Initialize MAVLink
     initializeMavlink()

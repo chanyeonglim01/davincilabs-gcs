@@ -13,6 +13,57 @@ import type {
   CommandType
 } from '../../renderer/src/types'
 import { MAV_MODE_FLAG, MAV_STATE, MAV_RESULT } from '../../renderer/src/types'
+import { decodeCustomMode, formatModeLabel } from './customModes'
+
+/**
+ * MAVLink v2 CRC_EXTRA table by msgid.
+ * Only includes message types we encode/decode.
+ */
+const CRC_EXTRA: Readonly<Record<number, number>> = {
+  0: 50, // HEARTBEAT
+  1: 124, // SYS_STATUS
+  20: 214, // PARAM_REQUEST_READ
+  21: 159, // PARAM_REQUEST_LIST
+  22: 220, // PARAM_VALUE
+  23: 168, // PARAM_SET
+  30: 39, // ATTITUDE
+  33: 104, // GLOBAL_POSITION_INT
+  41: 28, // MISSION_SET_CURRENT
+  42: 28, // MISSION_CURRENT
+  43: 132, // MISSION_REQUEST_LIST
+  44: 221, // MISSION_COUNT
+  45: 232, // MISSION_CLEAR_ALL
+  46: 11, // MISSION_ITEM_REACHED
+  47: 153, // MISSION_ACK
+  51: 196, // MISSION_REQUEST_INT
+  73: 38, // MISSION_ITEM_INT
+  74: 20, // VFR_HUD
+  76: 152, // COMMAND_LONG
+  77: 143 // COMMAND_ACK
+}
+
+const GCS_SYSID = 255
+const GCS_COMPID = 190
+
+/**
+ * CRC-16/MCRF4XX with CRC_EXTRA appended at the end.
+ * Returns 0xFFFF on unknown msgid (so verification will fail).
+ */
+function calculateCrc(data: Buffer, msgid: number): number {
+  const extra = CRC_EXTRA[msgid]
+  if (extra === undefined) return 0xffff
+
+  let crc = 0xffff
+  for (let i = 0; i < data.length; i++) {
+    const tmp = data[i] ^ (crc & 0xff)
+    const tmpShifted = (tmp ^ (tmp << 4)) & 0xff
+    crc = ((crc >> 8) ^ (tmpShifted << 8) ^ (tmpShifted << 3) ^ (tmpShifted >> 4)) & 0xffff
+  }
+  const tmp = extra ^ (crc & 0xff)
+  const tmpShifted = (tmp ^ (tmp << 4)) & 0xff
+  crc = ((crc >> 8) ^ (tmpShifted << 8) ^ (tmpShifted << 3) ^ (tmpShifted >> 4)) & 0xffff
+  return crc
+}
 
 export interface MavlinkParserEvents {
   telemetry: (data: TelemetryData) => void
@@ -26,10 +77,7 @@ export interface MavlinkParserEvents {
 }
 
 export declare interface MavlinkParser {
-  on<U extends keyof MavlinkParserEvents>(
-    event: U,
-    listener: MavlinkParserEvents[U]
-  ): this
+  on<U extends keyof MavlinkParserEvents>(event: U, listener: MavlinkParserEvents[U]): this
   emit<U extends keyof MavlinkParserEvents>(
     event: U,
     ...args: Parameters<MavlinkParserEvents[U]>
@@ -72,12 +120,16 @@ export class MavlinkParser extends EventEmitter {
     // Append to internal buffer
     this.buffer = Buffer.concat([this.buffer, incomingBuffer])
 
-    // Simple heuristic: look for MAVLink v2 magic byte (0xFD)
+    // Look for MAVLink v2 magic byte (0xFD), verify CRC, dispatch.
+    // On length/CRC/flag failure, advance one byte and resync (do not drop the
+    // entire buffer — a single bad byte should not lose subsequent good packets).
     while (this.buffer.length > 0) {
       const magicIndex = this.buffer.indexOf(0xfd)
       if (magicIndex === -1) {
-        // No MAVLink message found
-        this.buffer = Buffer.alloc(0)
+        // No magic at all in buffer — drop everything except the last byte
+        // (in case it is the start of a future magic)
+        this.buffer =
+          this.buffer.length > 0 ? this.buffer.subarray(this.buffer.length - 1) : Buffer.alloc(0)
         break
       }
 
@@ -91,9 +143,17 @@ export class MavlinkParser extends EventEmitter {
         break
       }
 
-      // Extract payload length and calculate total packet size
       const payloadLen = this.buffer[1]
       const incompatFlags = this.buffer[2]
+
+      // Drop packets with unsupported incompat flags (e.g. signing bit 0x01).
+      // We only know how to verify unsigned packets.
+      if ((incompatFlags & ~0x00) !== 0) {
+        // Advance one byte and resync.
+        this.buffer = this.buffer.subarray(1)
+        continue
+      }
+
       const signatureLen = (incompatFlags & 0x01) !== 0 ? 13 : 0
       const packetLen = 12 + payloadLen + signatureLen
 
@@ -102,13 +162,77 @@ export class MavlinkParser extends EventEmitter {
         break
       }
 
-      // Extract packet
       const packet = this.buffer.subarray(0, packetLen)
-      this.buffer = this.buffer.subarray(packetLen)
 
-      // Parse packet
+      // CRC verify: bytes [1 .. packetLen-3] + CRC_EXTRA(msgid) → CRC16/MCRF4XX
+      const msgid = packet.readUInt8(7) | (packet.readUInt8(8) << 8) | (packet.readUInt8(9) << 16)
+      const crcPkt = packet.readUInt16LE(packetLen - 2 - signatureLen)
+      const crcCalc = calculateCrc(packet.subarray(1, packetLen - 2 - signatureLen), msgid)
+      if (crcCalc !== crcPkt) {
+        // CRC mismatch — drop one byte and resync, keep the rest
+        this.buffer = this.buffer.subarray(1)
+        continue
+      }
+
+      // target_system / target_component filter (best-effort, message-specific):
+      // For COMMAND_ACK (msgid 77) the target lives at payload offsets 4 (sys) and 5 (comp).
+      // Skip filtering for messages without target fields.
+      if (!this.isAddressedToUs(msgid, packet)) {
+        this.buffer = this.buffer.subarray(packetLen)
+        continue
+      }
+
+      this.buffer = this.buffer.subarray(packetLen)
       this.parsePacket(packet)
     }
+  }
+
+  /**
+   * For messages that carry target_system/target_component, drop packets not
+   * addressed to this GCS (255/190) or broadcast (0).
+   * For messages without targets, accept.
+   */
+  private isAddressedToUs(msgid: number, packet: Buffer): boolean {
+    // Messages with (target_system, target_component) at known payload offsets
+    // payload starts at byte 10 in the trimmed packet
+    let offSys = -1
+    let offComp = -1
+    switch (msgid) {
+      case 77: // COMMAND_ACK: command(2) + result(1) + progress(1) + result_param2(4) + target_system(1) + target_component(1)
+        offSys = 10 + 2 + 1 + 1 + 4
+        offComp = offSys + 1
+        break
+      case 22: // PARAM_VALUE — broadcast typically, no target
+      case 0: // HEARTBEAT — no target
+      case 30: // ATTITUDE — no target
+      case 33: // GLOBAL_POSITION_INT — no target
+      case 74: // VFR_HUD — no target
+      case 1: // SYS_STATUS — no target
+      case 42: // MISSION_CURRENT — no target
+      case 46: // MISSION_ITEM_REACHED — no target
+        return true
+      case 47: {
+        // MISSION_ACK: target_system(1) + target_component(1) + type(1)
+        offSys = 10
+        offComp = 11
+        break
+      }
+      case 40: // MISSION_REQUEST (legacy)
+      case 51: {
+        // MISSION_REQUEST_INT: target_system(1) + target_component(1) + seq(2)
+        offSys = 10 + 2
+        offComp = offSys + 1
+        break
+      }
+      default:
+        return true
+    }
+    if (offSys < 0 || offSys >= packet.length) return true
+    const ts = packet.readUInt8(offSys)
+    const tc = packet.readUInt8(offComp)
+    if (ts === 0 && tc === 0) return true // broadcast
+    if (ts === GCS_SYSID && (tc === GCS_COMPID || tc === 0)) return true
+    return false
   }
 
   /**
@@ -170,12 +294,12 @@ export class MavlinkParser extends EventEmitter {
     const base_mode = packet.readUInt8(16)
     const system_status = packet.readUInt8(19)
     const custom_mode = packet.readUInt32LE(10)
-    const main_mode = (custom_mode >> 16) & 0xff
-    const sub_mode = (custom_mode >> 24) & 0xff
 
     const armed = (base_mode & MAV_MODE_FLAG.SAFETY_ARMED) !== 0
     const statusStr = this.getSystemStatusString(system_status)
-    const flightMode = this.getPx4FlightMode(main_mode, sub_mode)
+    // UAM custom_mode bit layout (see customModes.ts §1.5):
+    // [0..7] flight_mode, [8..15] flight_state, [16..23] sub_state
+    const flightMode = formatModeLabel(decodeCustomMode(custom_mode))
 
     if (this.telemetryState.status) {
       this.telemetryState.status.armed = armed
@@ -334,6 +458,20 @@ export class MavlinkParser extends EventEmitter {
   }
 
   /**
+   * Mark the link as stale (no HEARTBEAT for >3s).
+   * Forces a telemetry emit with flightMode='STALE' so the renderer can
+   * surface the loss of contact even when other messages stop arriving.
+   */
+  markStale(): void {
+    if (this.telemetryState.status) {
+      this.telemetryState.status.flightMode = 'STALE'
+    }
+    this.telemetryState.timestamp = Date.now()
+    this.lastTelemetryEmit = this.telemetryState.timestamp
+    this.emit('telemetry', this.telemetryState as TelemetryData)
+  }
+
+  /**
    * Emit telemetry at max 30Hz (throttle)
    */
   private tryEmitTelemetry(): void {
@@ -366,38 +504,6 @@ export class MavlinkParser extends EventEmitter {
       [MAV_STATE.FLIGHT_TERMINATION]: 'FLIGHT_TERMINATION'
     }
     return statusMap[status] || 'UNKNOWN'
-  }
-
-  /**
-   * Convert PX4 custom_mode main/sub to flight mode string
-   */
-  private getPx4FlightMode(mainMode: number, subMode: number): string {
-    switch (mainMode) {
-      case 1:
-        return 'MANUAL'
-      case 2:
-        return 'ALTCTL'
-      case 3:
-        return 'POSCTL'
-      case 4: {
-        const autoSubMap: Record<number, string> = {
-          2: 'AUTO.TAKEOFF',
-          3: 'AUTO.LOITER',
-          4: 'AUTO.MISSION',
-          5: 'AUTO.RTL',
-          6: 'AUTO.LAND'
-        }
-        return autoSubMap[subMode] || 'AUTO'
-      }
-      case 5:
-        return 'ACRO'
-      case 6:
-        return 'OFFBOARD'
-      case 7:
-        return 'STABILIZED'
-      default:
-        return 'UNKNOWN'
-    }
   }
 
   /**

@@ -23,11 +23,14 @@ export function useMavlink() {
     })
 
     // Fetch initial connection status (handles auto-connect race condition)
-    window.mavlink.getConnectionStatus().then((status) => {
-      setConnection(status)
-    }).catch(() => {
-      // Ignore — API not ready yet
-    })
+    window.mavlink
+      .getConnectionStatus()
+      .then((status) => {
+        setConnection(status)
+      })
+      .catch(() => {
+        // Ignore — API not ready yet
+      })
 
     // Cleanup on unmount
     return () => {

@@ -48,16 +48,12 @@ export function AltitudeTape(): React.ReactElement {
 
       {/* Center indicator box */}
       <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-10 border-y-2 border-primary bg-primary/10 flex items-center justify-center">
-        <span className="text-2xl font-mono font-bold text-primary">
-          {Math.round(altitude)}
-        </span>
+        <span className="text-2xl font-mono font-bold text-primary">{Math.round(altitude)}</span>
       </div>
 
       {/* Label */}
       <div className="absolute bottom-2 left-0 right-0 text-center">
-        <span className="text-[10px] font-semibold text-text-secondary tracking-wider">
-          ALT
-        </span>
+        <span className="text-[10px] font-semibold text-text-secondary tracking-wider">ALT</span>
       </div>
     </div>
   )

@@ -8,8 +8,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 // We manually import the store using the resolved path since vitest
 // does not bundle the renderer in node mode.
 import { useTelemetryStore } from '../../../src/renderer/src/store/telemetryStore'
-import type { TelemetryData, ConnectionStatus } from '../../../src/renderer/src/types/telemetry'
-import type { ConnectionConfig } from '../../../src/renderer/src/types/ipc'
+import type { TelemetryData } from '../../../src/renderer/src/types/telemetry'
+import type { ConnectionStatus } from '../../../src/renderer/src/types/ipc'
 
 // Helper that creates a minimal TelemetryData object
 function makeTelemetry(overrides: Partial<TelemetryData> = {}): TelemetryData {
@@ -38,6 +38,7 @@ describe('useTelemetryStore', () => {
       telemetry: null,
       connection: {
         connected: false,
+        linkState: 'DISCONNECTED',
         mode: 'simulink',
         host: '127.0.0.1',
         port: 14551,
@@ -57,6 +58,7 @@ describe('useTelemetryStore', () => {
     it('connection defaults are correct', () => {
       const { connection } = useTelemetryStore.getState()
       expect(connection.connected).toBe(false)
+      expect(connection.linkState).toBe('DISCONNECTED')
       expect(connection.mode).toBe('simulink')
       expect(connection.host).toBe('127.0.0.1')
       expect(connection.port).toBe(14551)
@@ -113,6 +115,7 @@ describe('useTelemetryStore', () => {
     it('updates connection status', () => {
       const newStatus: ConnectionStatus = {
         connected: true,
+        linkState: 'LINKED',
         mode: 'simulink',
         host: '192.168.1.1',
         port: 14550,
@@ -121,8 +124,35 @@ describe('useTelemetryStore', () => {
       useTelemetryStore.getState().setConnection(newStatus)
       const { connection } = useTelemetryStore.getState()
       expect(connection.connected).toBe(true)
+      expect(connection.linkState).toBe('LINKED')
       expect(connection.host).toBe('192.168.1.1')
       expect(connection.port).toBe(14550)
+    })
+
+    it('reflects WAITING_HEARTBEAT after bind without heartbeat', () => {
+      const newStatus: ConnectionStatus = {
+        connected: true,
+        linkState: 'WAITING_HEARTBEAT',
+        mode: 'simulink',
+        host: '127.0.0.1',
+        port: 14551,
+        lastHeartbeat: 0
+      }
+      useTelemetryStore.getState().setConnection(newStatus)
+      expect(useTelemetryStore.getState().connection.linkState).toBe('WAITING_HEARTBEAT')
+    })
+
+    it('reflects STALE when heartbeat times out', () => {
+      const newStatus: ConnectionStatus = {
+        connected: true,
+        linkState: 'STALE',
+        mode: 'simulink',
+        host: '127.0.0.1',
+        port: 14551,
+        lastHeartbeat: Date.now() - 5000
+      }
+      useTelemetryStore.getState().setConnection(newStatus)
+      expect(useTelemetryStore.getState().connection.linkState).toBe('STALE')
     })
   })
 

@@ -1,5 +1,5 @@
 interface Props {
-  roll: number  // degrees
+  roll: number // degrees
   pitch: number // degrees
   size?: number
 }
@@ -25,12 +25,7 @@ export function HorizonIndicator({ roll, pitch, size = 180 }: Props) {
   const id = `clip-${size}`
 
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      style={{ display: 'block' }}
-    >
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
       <defs>
         <clipPath id={id}>
           <circle cx={cx} cy={cy} r={r} />
@@ -55,22 +50,9 @@ export function HorizonIndicator({ roll, pitch, size = 180 }: Props) {
               fill="#3d7ab5"
             />
             {/* Ground */}
-            <rect
-              x={cx - size}
-              y={cy}
-              width={size * 3}
-              height={size * 2}
-              fill="#7a5533"
-            />
+            <rect x={cx - size} y={cy} width={size * 3} height={size * 2} fill="#7a5533" />
             {/* Horizon line */}
-            <line
-              x1={cx - size}
-              y1={cy}
-              x2={cx + size}
-              y2={cy}
-              stroke="white"
-              strokeWidth={1.5}
-            />
+            <line x1={cx - size} y1={cy} x2={cx + size} y2={cy} stroke="white" strokeWidth={1.5} />
 
             {/* Pitch ladder lines */}
             {pitchLines.map((deg) => {
@@ -118,12 +100,7 @@ export function HorizonIndicator({ roll, pitch, size = 180 }: Props) {
         </g>
 
         {/* Vignette overlay */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          fill={`url(#vign-${size})`}
-        />
+        <circle cx={cx} cy={cy} r={r} fill={`url(#vign-${size})`} />
       </g>
 
       {/* Bank angle arc */}
@@ -202,23 +179,9 @@ export function HorizonIndicator({ roll, pitch, size = 180 }: Props) {
       />
 
       {/* Outer bezel ring */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke="#1a1e16"
-        strokeWidth={size * 0.06}
-      />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1a1e16" strokeWidth={size * 0.06} />
       {/* Inner bezel highlight */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke="rgba(236,223,204,0.15)"
-        strokeWidth={1}
-      />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(236,223,204,0.15)" strokeWidth={1} />
     </svg>
   )
 }

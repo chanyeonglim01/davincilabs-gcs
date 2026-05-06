@@ -6,9 +6,7 @@ import { useMissionStore } from '@renderer/store/missionStore'
 import type { ActionKey } from '@renderer/store/missionStore'
 import droneIconSvg from '@renderer/assets/drone_icon.svg'
 
-const CesiumMap = lazy(() =>
-  import('./map/CesiumMap').then((m) => ({ default: m.CesiumMap }))
-)
+const CesiumMap = lazy(() => import('./map/CesiumMap').then((m) => ({ default: m.CesiumMap })))
 
 // 128×128 icon: drone body center at (64,64) = anchor point
 // Matches CesiumMap's billboard center → 2D/3D positions align
@@ -64,10 +62,14 @@ export function MapBackground() {
 
   // Heading unwrap — delta 누적, 애니메이션 없음 (즉시 반영)
   const prevHeadingRef = useRef<number | null>(null)
-  const accHeadingRef  = useRef(0)
+  const accHeadingRef = useRef(0)
   const [tileMode, setTileMode] = useState<TileMode>('satellite')
   const [mapMode, setMapMode] = useState<MapMode>('2d')
-  const [cesiumCenter, setCesiumCenter] = useState<{ lon: number; lat: number; zoom: number } | null>(null)
+  const [cesiumCenter, setCesiumCenter] = useState<{
+    lon: number
+    lat: number
+    zoom: number
+  } | null>(null)
   const { telemetry, history } = useTelemetryStore()
   const { waypoints } = useMissionStore()
 
@@ -142,7 +144,7 @@ export function MapBackground() {
       prevHeadingRef.current = raw
       accHeadingRef.current = raw
       if (rotDiv) {
-        rotDiv.style.transition = 'none'  // HMR에서 잔여 transition 제거
+        rotDiv.style.transition = 'none' // HMR에서 잔여 transition 제거
         rotDiv.style.transform = `rotate(${raw}deg)`
       }
       return
@@ -228,16 +230,11 @@ export function MapBackground() {
 
     // Use last 150 points
     const recent = history.slice(-150)
-    const validPoints = recent.filter(
-      (p) => p.position.lat !== 0 || p.position.lon !== 0
-    )
+    const validPoints = recent.filter((p) => p.position.lat !== 0 || p.position.lon !== 0)
 
     if (validPoints.length < 2) return
 
-    const coords: L.LatLngExpression[] = validPoints.map((p) => [
-      p.position.lat,
-      p.position.lon
-    ])
+    const coords: L.LatLngExpression[] = validPoints.map((p) => [p.position.lat, p.position.lon])
 
     droneTrailRef.current = L.polyline(coords, {
       color: 'rgba(236,223,204,0.35)',
@@ -275,7 +272,10 @@ export function MapBackground() {
       <div
         ref={mapRef}
         style={{
-          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
           background: '#181C14',
           display: mapMode === '2d' ? 'block' : 'none'
         }}
@@ -285,15 +285,20 @@ export function MapBackground() {
       {mapMode === '3d' && (
         <Suspense
           fallback={
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: '#181C14',
-              color: 'rgba(236,223,204,0.4)',
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: '11px',
-              letterSpacing: '0.1em'
-            }}>
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#181C14',
+                color: 'rgba(236,223,204,0.4)',
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: '11px',
+                letterSpacing: '0.1em'
+              }}
+            >
               LOADING 3D...
             </div>
           }
@@ -316,13 +321,19 @@ export function MapBackground() {
         }}
       >
         <button
-          onClick={() => { setMapMode('2d'); setTileMode('satellite') }}
+          onClick={() => {
+            setMapMode('2d')
+            setTileMode('satellite')
+          }}
           style={btnStyle(mapMode === '2d' && tileMode === 'satellite')}
         >
           SAT
         </button>
         <button
-          onClick={() => { setMapMode('2d'); setTileMode('dark') }}
+          onClick={() => {
+            setMapMode('2d')
+            setTileMode('dark')
+          }}
           style={btnStyle(mapMode === '2d' && tileMode === 'dark')}
         >
           2D

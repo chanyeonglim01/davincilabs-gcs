@@ -14,22 +14,39 @@ import type {
   HomePosition,
   ParamEntry,
   ParamProgress,
-  LogEntry
+  LogEntry,
+  SerialPortInfo
 } from '../renderer/src/types'
 
 // Custom MAVLink API for renderer
 const mavlinkAPI = {
   // Invoke (Renderer -> Main)
-  connect: (config: ConnectionConfig): Promise<void> => ipcRenderer.invoke('mavlink:connect', config),
-  reconnect: (config: { host: string; port: number }): Promise<{ success: boolean; error?: string }> =>
+  connect: (config: ConnectionConfig): Promise<void> =>
+    ipcRenderer.invoke('mavlink:connect', config),
+  reconnect: (config: {
+    host: string
+    port: number
+  }): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('mavlink:reconnect', config),
   disconnect: (): Promise<void> => ipcRenderer.invoke('mavlink:disconnect'),
-  sendCommand: (command: Command): Promise<CommandResult> => ipcRenderer.invoke('mavlink:send-command', command),
+  sendCommand: (command: Command): Promise<CommandResult> =>
+    ipcRenderer.invoke('mavlink:send-command', command),
   requestParams: (): Promise<void> => ipcRenderer.invoke('mavlink:request-params'),
   setParam: (param: ParamEntry): Promise<void> => ipcRenderer.invoke('mavlink:set-param', param),
-  getConnectionStatus: (): Promise<ConnectionStatus> => ipcRenderer.invoke('mavlink:get-connection-status'),
-  uploadMission: (waypoints: { action: string; lat: number; lon: number; alt: number; acceptRadius: number; loiterRadius: number }[]): Promise<{ success: boolean; count: number; error?: string }> =>
+  getConnectionStatus: (): Promise<ConnectionStatus> =>
+    ipcRenderer.invoke('mavlink:get-connection-status'),
+  uploadMission: (
+    waypoints: {
+      action: string
+      lat: number
+      lon: number
+      alt: number
+      acceptRadius: number
+      loiterRadius: number
+    }[]
+  ): Promise<{ success: boolean; count: number; error?: string }> =>
     ipcRenderer.invoke('mavlink:upload-mission', waypoints),
+  listSerialPorts: (): Promise<SerialPortInfo[]> => ipcRenderer.invoke('serial:list-ports'),
 
   // Listen (Main -> Renderer)
   onTelemetryUpdate: (callback: (data: TelemetryData) => void) => {
@@ -39,7 +56,8 @@ const mavlinkAPI = {
   },
 
   onConnectionStatus: (callback: (status: ConnectionStatus) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, status: ConnectionStatus) => callback(status)
+    const listener = (_event: Electron.IpcRendererEvent, status: ConnectionStatus) =>
+      callback(status)
     ipcRenderer.on('connection-status', listener)
     return () => ipcRenderer.removeListener('connection-status', listener)
   },
@@ -57,7 +75,8 @@ const mavlinkAPI = {
   },
 
   onParamProgress: (callback: (progress: ParamProgress) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, progress: ParamProgress) => callback(progress)
+    const listener = (_event: Electron.IpcRendererEvent, progress: ParamProgress) =>
+      callback(progress)
     ipcRenderer.on('param-progress', listener)
     return () => ipcRenderer.removeListener('param-progress', listener)
   },

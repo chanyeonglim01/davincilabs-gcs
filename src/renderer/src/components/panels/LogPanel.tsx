@@ -59,7 +59,9 @@ export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
         height: Math.max(80, resizeStart.current.h + dy)
       })
     }
-    const onMouseUp = () => { resizing.current = false }
+    const onMouseUp = () => {
+      resizing.current = false
+    }
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
     return () => {
@@ -121,7 +123,12 @@ export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
                 {[0, 1].map((j) => (
                   <div
                     key={j}
-                    style={{ width: '2px', height: '2px', borderRadius: '50%', background: '#ECDFCC' }}
+                    style={{
+                      width: '2px',
+                      height: '2px',
+                      borderRadius: '50%',
+                      background: '#ECDFCC'
+                    }}
                   />
                 ))}
               </div>
@@ -175,11 +182,12 @@ export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
                   gap: '8px',
                   padding: '3px 12px',
                   alignItems: 'flex-start',
-                  background: entry.level === 'ERR'
-                    ? 'rgba(255, 85, 85, 0.07)'
-                    : entry.level === 'WARN'
-                    ? 'rgba(245, 200, 66, 0.04)'
-                    : 'transparent'
+                  background:
+                    entry.level === 'ERR'
+                      ? 'rgba(255, 85, 85, 0.07)'
+                      : entry.level === 'WARN'
+                        ? 'rgba(245, 200, 66, 0.04)'
+                        : 'transparent'
                 }}
               >
                 <span

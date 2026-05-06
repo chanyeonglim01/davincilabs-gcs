@@ -11,19 +11,44 @@ export type ConnectionMode = 'simulink' | 'real-drone'
 
 export interface ConnectionConfig {
   mode: ConnectionMode
-  host: string       // e.g. '127.0.0.1'
-  port: number       // local UDP listen port (GCS receives here)
+  host: string // e.g. '127.0.0.1'
+  port: number // local UDP listen port (GCS receives here)
   remotePort?: number // remote UDP send port (drone listens here); defaults to port
   sysid: number
   compid: number
 }
 
+/**
+ * Five-state link lifecycle exposed to the UI.
+ *
+ * - DISCONNECTED:        no transport (socket closed or never opened)
+ * - WAITING_HEARTBEAT:   transport open/bound but no HEARTBEAT received yet
+ * - LINKED:              HEARTBEAT received within the last 3 seconds
+ * - STALE:               had HEARTBEAT(s) before, none within the last 3s
+ * - ERROR:               last transport open/bind attempt failed
+ */
+export type LinkState = 'DISCONNECTED' | 'WAITING_HEARTBEAT' | 'LINKED' | 'STALE' | 'ERROR'
+
 export interface ConnectionStatus {
   connected: boolean
+  linkState: LinkState
   mode: ConnectionMode
   host: string
   port: number
   lastHeartbeat: number // ms since epoch, 0 = never
+  error?: string // populated when linkState === 'ERROR'
+}
+
+// --- Serial port enumeration ---
+
+export interface SerialPortInfo {
+  path: string
+  manufacturer?: string
+  serialNumber?: string
+  pnpId?: string
+  vendorId?: string
+  productId?: string
+  friendlyName?: string
 }
 
 // --- Commands ---
@@ -91,4 +116,5 @@ export interface RendererToMainChannels {
   'mavlink:request-params': void
   'mavlink:set-param': ParamEntry
   'mavlink:get-connection-status': ConnectionStatus
+  'serial:list-ports': SerialPortInfo[]
 }

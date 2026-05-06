@@ -53,8 +53,10 @@ export function AirspeedIndicator({ airspeed, size = 140 }: Props) {
         return (
           <line
             key={spd}
-            x1={outer.x} y1={outer.y}
-            x2={inner.x} y2={inner.y}
+            x1={outer.x}
+            y1={outer.y}
+            x2={inner.x}
+            y2={inner.y}
             stroke="rgba(236,223,204,0.7)"
             strokeWidth={isMajor ? 1.5 : 0.8}
           />
@@ -69,7 +71,8 @@ export function AirspeedIndicator({ airspeed, size = 140 }: Props) {
         return (
           <text
             key={spd}
-            x={pos.x} y={pos.y + 3}
+            x={pos.x}
+            y={pos.y + 3}
             textAnchor="middle"
             fontSize={size * 0.07}
             fill="rgba(236,223,204,0.7)"
@@ -83,15 +86,19 @@ export function AirspeedIndicator({ airspeed, size = 140 }: Props) {
       {/* Needle */}
       <g transform={`rotate(${needleAngle}, ${cx}, ${cy})`}>
         <line
-          x1={cx} y1={cy + r * 0.2}
-          x2={cx} y2={cy - r * 0.72}
+          x1={cx}
+          y1={cy + r * 0.2}
+          x2={cx}
+          y2={cy - r * 0.72}
           stroke="#ECDFCC"
           strokeWidth={1.8}
           strokeLinecap="round"
         />
         <line
-          x1={cx} y1={cy + r * 0.2}
-          x2={cx} y2={cy + r * 0.1}
+          x1={cx}
+          y1={cy + r * 0.2}
+          x2={cx}
+          y2={cy + r * 0.1}
           stroke="rgba(236,223,204,0.4)"
           strokeWidth={3}
           strokeLinecap="round"
@@ -99,12 +106,25 @@ export function AirspeedIndicator({ airspeed, size = 140 }: Props) {
       </g>
 
       {/* Center cap */}
-      <circle cx={cx} cy={cy} r={size * 0.04} fill="#3C3D37" stroke="rgba(236,223,204,0.3)" strokeWidth={1} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={size * 0.04}
+        fill="#3C3D37"
+        stroke="rgba(236,223,204,0.3)"
+        strokeWidth={1}
+      />
 
       {/* Label */}
-      <text x={cx} y={cy + r * 0.55} textAnchor="middle"
-        fontSize={size * 0.065} fill="rgba(236,223,204,0.4)"
-        fontFamily="Space Grotesk, sans-serif" letterSpacing="0.1em">
+      <text
+        x={cx}
+        y={cy + r * 0.55}
+        textAnchor="middle"
+        fontSize={size * 0.065}
+        fill="rgba(236,223,204,0.4)"
+        fontFamily="Space Grotesk, sans-serif"
+        letterSpacing="0.1em"
+      >
         m/s
       </text>
     </svg>

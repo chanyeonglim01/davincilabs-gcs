@@ -5,7 +5,7 @@
 
 import dgram from 'dgram'
 import { EventEmitter } from 'events'
-import type { ConnectionConfig, ConnectionStatus } from '../../renderer/src/types'
+import type { ConnectionConfig, ConnectionStatus, LinkState } from '../../renderer/src/types'
 
 export interface MavlinkConnectionEvents {
   data: (buffer: Buffer) => void
@@ -13,18 +13,20 @@ export interface MavlinkConnectionEvents {
   disconnected: () => void
   error: (error: Error) => void
   heartbeatTimeout: () => void
+  heartbeatRecovered: () => void
+  /** Fires whenever the derived 5-state link lifecycle transitions. */
+  linkStateChanged: (state: LinkState) => void
 }
 
 export declare interface MavlinkConnection {
-  on<U extends keyof MavlinkConnectionEvents>(
-    event: U,
-    listener: MavlinkConnectionEvents[U]
-  ): this
+  on<U extends keyof MavlinkConnectionEvents>(event: U, listener: MavlinkConnectionEvents[U]): this
   emit<U extends keyof MavlinkConnectionEvents>(
     event: U,
     ...args: Parameters<MavlinkConnectionEvents[U]>
   ): boolean
 }
+
+const HEARTBEAT_TIMEOUT_MS = 3000
 
 export class MavlinkConnection extends EventEmitter {
   private socket: dgram.Socket | null = null
@@ -32,6 +34,9 @@ export class MavlinkConnection extends EventEmitter {
   private heartbeatTimer: NodeJS.Timeout | null = null
   private lastHeartbeat: number = 0
   private _isConnected: boolean = false
+  private _heartbeatActive: boolean = false
+  private _linkState: LinkState = 'DISCONNECTED'
+  private _lastError: string | undefined
 
   constructor() {
     super()
@@ -46,6 +51,7 @@ export class MavlinkConnection extends EventEmitter {
     }
 
     this.config = config
+    this._lastError = undefined
     this.socket = dgram.createSocket('udp4')
 
     return new Promise((resolve, reject) => {
@@ -54,13 +60,19 @@ export class MavlinkConnection extends EventEmitter {
         return
       }
 
+      let bindResolved = false
+
       // Bind to local port
       this.socket.bind(config.port, () => {
         console.log(
           `[MAVLink] Listening on UDP ${config.host}:${config.port} (${config.mode} mode)`
         )
+        bindResolved = true
         this._isConnected = true
+        this._heartbeatActive = false
+        this.lastHeartbeat = 0
         this.startHeartbeatMonitor()
+        this.setLinkState('WAITING_HEARTBEAT')
         this.emit('connected')
         resolve()
       })
@@ -74,15 +86,29 @@ export class MavlinkConnection extends EventEmitter {
       // Error handling
       this.socket.on('error', (err) => {
         console.error('[MAVLink] Socket error:', err.message)
+        this._lastError = err.message
+        // If bind failed before resolution, transition into ERROR state.
+        if (!bindResolved) {
+          this._isConnected = false
+          this.stopHeartbeatMonitor()
+          this.setLinkState('ERROR')
+        }
         this.emit('error', err)
-        reject(err)
+        if (!bindResolved) {
+          reject(err)
+        }
       })
 
       // Socket closed
       this.socket.on('close', () => {
         console.log('[MAVLink] Socket closed')
         this._isConnected = false
+        this._heartbeatActive = false
         this.stopHeartbeatMonitor()
+        // Only transition to DISCONNECTED if we did not already enter ERROR.
+        if (this._linkState !== 'ERROR') {
+          this.setLinkState('DISCONNECTED')
+        }
         this.emit('disconnected')
       })
     })
@@ -122,8 +148,11 @@ export class MavlinkConnection extends EventEmitter {
     }
     this.stopHeartbeatMonitor()
     this._isConnected = false
+    this._heartbeatActive = false
     this.config = null
     this.lastHeartbeat = 0
+    this._lastError = undefined
+    this.setLinkState('DISCONNECTED')
   }
 
   /**
@@ -147,31 +176,57 @@ export class MavlinkConnection extends EventEmitter {
   }
 
   /**
-   * Update last heartbeat timestamp
-   * Called by parser when HEARTBEAT message received
+   * Update last heartbeat timestamp.
+   * Called by parser when HEARTBEAT message received.
+   * Drives transitions WAITING_HEARTBEAT/STALE -> LINKED.
    */
   updateHeartbeat(): void {
     this.lastHeartbeat = Date.now()
-  }
-
-  /**
-   * Get current connection status
-   */
-  getStatus(): ConnectionStatus {
-    return {
-      connected: this._isConnected,
-      mode: this.config?.mode || 'simulink',
-      host: this.config?.host || '',
-      port: this.config?.port || 0,
-      lastHeartbeat: this.lastHeartbeat
+    if (!this._heartbeatActive) {
+      this._heartbeatActive = true
+      this.emit('heartbeatRecovered')
+    }
+    if (this._isConnected && this._linkState !== 'LINKED') {
+      this.setLinkState('LINKED')
     }
   }
 
   /**
-   * Check if connected
+   * Get current connection status (snapshot for IPC broadcast).
+   */
+  getStatus(): ConnectionStatus {
+    return {
+      connected: this._isConnected,
+      linkState: this._linkState,
+      mode: this.config?.mode || 'simulink',
+      host: this.config?.host || '',
+      port: this.config?.port || 0,
+      lastHeartbeat: this.lastHeartbeat,
+      error: this._linkState === 'ERROR' ? this._lastError : undefined
+    }
+  }
+
+  /**
+   * Check if the underlying transport is open.
    */
   get isConnected(): boolean {
     return this._isConnected
+  }
+
+  /**
+   * Current 5-state link lifecycle.
+   */
+  get linkState(): LinkState {
+    return this._linkState
+  }
+
+  /**
+   * Update the derived link state and emit a change event when it transitions.
+   */
+  private setLinkState(next: LinkState): void {
+    if (this._linkState === next) return
+    this._linkState = next
+    this.emit('linkStateChanged', next)
   }
 
   /**
@@ -181,9 +236,13 @@ export class MavlinkConnection extends EventEmitter {
     this.stopHeartbeatMonitor()
     this.heartbeatTimer = setInterval(() => {
       const now = Date.now()
-      if (this.lastHeartbeat > 0 && now - this.lastHeartbeat > 3000) {
-        console.warn('[MAVLink] Heartbeat timeout (>3s)')
-        this.emit('heartbeatTimeout')
+      if (this.lastHeartbeat > 0 && now - this.lastHeartbeat > HEARTBEAT_TIMEOUT_MS) {
+        if (this._heartbeatActive) {
+          console.warn('[MAVLink] Heartbeat timeout (>3s)')
+          this._heartbeatActive = false
+          this.setLinkState('STALE')
+          this.emit('heartbeatTimeout')
+        }
       }
     }, 1000)
   }

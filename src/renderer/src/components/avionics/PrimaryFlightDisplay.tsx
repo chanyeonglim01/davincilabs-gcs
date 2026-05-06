@@ -34,7 +34,11 @@ export function PrimaryFlightDisplay(): React.ReactElement {
           <Battery className="w-4 h-4 text-warning" />
           <span
             className={`text-sm font-mono font-semibold ${
-              battery >= 0 ? (battery > 20 ? 'text-foreground' : 'text-danger') : 'text-muted-foreground'
+              battery >= 0
+                ? battery > 20
+                  ? 'text-foreground'
+                  : 'text-danger'
+                : 'text-muted-foreground'
             }`}
           >
             {battery >= 0 ? `${battery}%` : '--'}

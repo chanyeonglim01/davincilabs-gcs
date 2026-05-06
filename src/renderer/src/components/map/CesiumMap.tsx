@@ -10,7 +10,7 @@ import {
   DRONE_MIN_PIXEL_SIZE,
   DRONE_MAX_SCALE,
   computeDroneOrientation,
-  patchModelDepth,
+  patchModelDepth
 } from './cesiumDroneModel'
 
 const DEFAULT_LON = 126.978
@@ -86,7 +86,8 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     let removeDepthPatch: (() => void) | undefined
 
     try {
-      Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZjE2MmRhMi0wMzRiLTQ4MGItYTE0Yi01NTk3ZWY2Yjg3MWUiLCJpZCI6MzkxOTkyLCJpYXQiOjE3NzE1MDkwODh9.pf3-Gjw9bfY1-GhlCdCdB_Khnvl094ULGmdhk7109A0'
+      Cesium.Ion.defaultAccessToken =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZjE2MmRhMi0wMzRiLTQ4MGItYTE0Yi01NTk3ZWY2Yjg3MWUiLCJpZCI6MzkxOTkyLCJpYXQiOjE3NzE1MDkwODh9.pf3-Gjw9bfY1-GhlCdCdB_Khnvl094ULGmdhk7109A0'
 
       const viewer = new Cesium.Viewer(container, {
         timeline: false,
@@ -111,14 +112,18 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         )
       })
 
-      Cesium.CesiumTerrainProvider.fromIonAssetId(1, { requestVertexNormals: false }).then((terrain) => {
-        if (viewerRef.current) viewerRef.current.terrainProvider = terrain
-      }).catch(() => {})
+      Cesium.CesiumTerrainProvider.fromIonAssetId(1, { requestVertexNormals: false })
+        .then((terrain) => {
+          if (viewerRef.current) viewerRef.current.terrainProvider = terrain
+        })
+        .catch(() => {})
 
       // OSM Buildings (3D 건물)
-      Cesium.Cesium3DTileset.fromIonAssetId(96188).then((tileset) => {
-        if (viewerRef.current) viewerRef.current.scene.primitives.add(tileset)
-      }).catch(() => {})
+      Cesium.Cesium3DTileset.fromIonAssetId(96188)
+        .then((tileset) => {
+          if (viewerRef.current) viewerRef.current.scene.primitives.add(tileset)
+        })
+        .catch(() => {})
 
       viewer.scene.globe.depthTestAgainstTerrain = false
 
@@ -145,9 +150,7 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
       entityRef.current = viewer.entities.add({
         name: 'Drone',
         position: initPos,
-        orientation: new Cesium.ConstantProperty(
-          computeDroneOrientation(initPos, 0, 0, 0)
-        ),
+        orientation: new Cesium.ConstantProperty(computeDroneOrientation(initPos, 0, 0, 0)),
         model: {
           uri: DRONE_MODEL_URI,
           scale: DRONE_MODEL_SCALE,
@@ -156,7 +159,7 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
           heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
           silhouetteColor: Cesium.Color.fromCssColorString('#ECDFCC'),
           silhouetteSize: 1.0,
-          shadows: Cesium.ShadowMode.DISABLED,
+          shadows: Cesium.ShadowMode.DISABLED
         },
         label: {
           show: false,
@@ -183,7 +186,6 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         viewer.forceResize()
         viewer.scene.requestRender()
       }, 300)
-
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
@@ -220,7 +222,12 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     const position = Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
     entityRef.current.position = new Cesium.ConstantPositionProperty(position)
     entityRef.current.orientation = new Cesium.ConstantProperty(
-      computeDroneOrientation(position, accHeadingRef.current, telemetry.attitude.pitch, telemetry.attitude.roll)
+      computeDroneOrientation(
+        position,
+        accHeadingRef.current,
+        telemetry.attitude.pitch,
+        telemetry.attitude.roll
+      )
     )
     if (entityRef.current.label) {
       entityRef.current.label.show = new Cesium.ConstantProperty(true)
@@ -285,7 +292,8 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     // Remove existing waypoint markers and altitude sticks
     const toRemove: Cesium.Entity[] = []
     viewer.entities.values.forEach((e) => {
-      if (e.id?.startsWith(MISSION_MARKER_PREFIX) || e.id?.startsWith(MISSION_STICK_PREFIX)) toRemove.push(e)
+      if (e.id?.startsWith(MISSION_MARKER_PREFIX) || e.id?.startsWith(MISSION_STICK_PREFIX))
+        toRemove.push(e)
     })
     toRemove.forEach((e) => viewer.entities.remove(e))
 
@@ -296,9 +304,7 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
 
     // Draw mission polyline if 2+ navigable points
     if (navPoints.length >= 2) {
-      const positions = navPoints.map((w) =>
-        Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.alt)
-      )
+      const positions = navPoints.map((w) => Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.alt))
       viewer.entities.add({
         id: MISSION_POLYLINE_ID,
         name: 'Mission Path',
@@ -350,36 +356,43 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
           heightReference: Cesium.HeightReference.NONE
         },
-        label: hasPosition ? {
-          text: `${wp.alt}m`,
-          font: "10px 'JetBrains Mono', monospace",
-          fillColor: Cesium.Color.fromCssColorString(color),
-          outlineColor: Cesium.Color.fromCssColorString('#181C14'),
-          outlineWidth: 2,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-          pixelOffset: new Cesium.Cartesian2(0, -16),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          heightReference: Cesium.HeightReference.NONE
-        } : undefined
+        label: hasPosition
+          ? {
+              text: `${wp.alt}m`,
+              font: "10px 'JetBrains Mono', monospace",
+              fillColor: Cesium.Color.fromCssColorString(color),
+              outlineColor: Cesium.Color.fromCssColorString('#181C14'),
+              outlineWidth: 2,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              pixelOffset: new Cesium.Cartesian2(0, -16),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              heightReference: Cesium.HeightReference.NONE
+            }
+          : undefined
       })
     })
   }, [waypoints])
 
   if (error) {
     return (
-      <div style={{
-        position: 'absolute', inset: 0,
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        background: '#181C14',
-        color: '#ECDFCC',
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: '11px',
-        padding: '20px',
-        gap: '8px'
-      }}>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#181C14',
+          color: '#ECDFCC',
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '11px',
+          padding: '20px',
+          gap: '8px'
+        }}
+      >
         <span style={{ color: 'rgba(236,223,204,0.4)', fontSize: '9px' }}>CESIUM ERROR</span>
         <span style={{ textAlign: 'center', lineHeight: 1.6 }}>{error}</span>
       </div>

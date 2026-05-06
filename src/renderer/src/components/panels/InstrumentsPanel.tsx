@@ -32,8 +32,16 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
   const id = `vsi-${size}`
 
   // UP ticks: 270°→90° clockwise (through top). DOWN ticks: 270°→90° counter-clockwise (through bottom)
-  const upTicks = Array.from({ length: 11 }, (_, i) => ({ vs: i, angle: 270 + (i / maxVs) * 180, key: `u${i}` }))
-  const downTicks = Array.from({ length: 10 }, (_, i) => ({ vs: i + 1, angle: 270 - ((i + 1) / maxVs) * 180, key: `d${i + 1}` }))
+  const upTicks = Array.from({ length: 11 }, (_, i) => ({
+    vs: i,
+    angle: 270 + (i / maxVs) * 180,
+    key: `u${i}`
+  }))
+  const downTicks = Array.from({ length: 10 }, (_, i) => ({
+    vs: i + 1,
+    angle: 270 - ((i + 1) / maxVs) * 180,
+    key: `d${i + 1}`
+  }))
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -56,10 +64,17 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
         const isMajor = vs === 0 || vs % 5 === 0
         const isMed = vs % 2 === 0
         const outer = polarToXY(angle, r - 2)
-        const inner = polarToXY(angle, r - (isMajor ? size * 0.13 : isMed ? size * 0.08 : size * 0.05))
+        const inner = polarToXY(
+          angle,
+          r - (isMajor ? size * 0.13 : isMed ? size * 0.08 : size * 0.05)
+        )
         return (
-          <line key={key}
-            x1={outer.x} y1={outer.y} x2={inner.x} y2={inner.y}
+          <line
+            key={key}
+            x1={outer.x}
+            y1={outer.y}
+            x2={inner.x}
+            y2={inner.y}
             stroke={isMajor ? 'rgba(236,223,204,0.8)' : 'rgba(236,223,204,0.38)'}
             strokeWidth={isMajor ? 1.4 : 0.7}
           />
@@ -71,10 +86,17 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
         const isMajor = vs % 5 === 0
         const isMed = vs % 2 === 0
         const outer = polarToXY(angle, r - 2)
-        const inner = polarToXY(angle, r - (isMajor ? size * 0.13 : isMed ? size * 0.08 : size * 0.05))
+        const inner = polarToXY(
+          angle,
+          r - (isMajor ? size * 0.13 : isMed ? size * 0.08 : size * 0.05)
+        )
         return (
-          <line key={key}
-            x1={outer.x} y1={outer.y} x2={inner.x} y2={inner.y}
+          <line
+            key={key}
+            x1={outer.x}
+            y1={outer.y}
+            x2={inner.x}
+            y2={inner.y}
             stroke={isMajor ? 'rgba(236,223,204,0.8)' : 'rgba(236,223,204,0.38)'}
             strokeWidth={isMajor ? 1.4 : 0.7}
           />
@@ -86,54 +108,85 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
           10    at 3 o'clock  (270+180=450°=90°) — represents both UP and DOWN max
           DOWN-5 at 6 o'clock (180°) is covered by the digital box → omit */}
       {[
-        { vs: 5,  angle: 360 },   // UP-5  @ 12 o'clock
-        { vs: 10, angle: 90  },   // max   @ 3 o'clock
+        { vs: 5, angle: 360 }, // UP-5  @ 12 o'clock
+        { vs: 10, angle: 90 } // max   @ 3 o'clock
       ].map(({ vs, angle }) => {
         const pos = polarToXY(angle, r - size * 0.23)
         return (
-          <text key={`l${vs}`} x={pos.x} y={pos.y + 3.5}
-            textAnchor="middle" fontSize={size * 0.073}
+          <text
+            key={`l${vs}`}
+            x={pos.x}
+            y={pos.y + 3.5}
+            textAnchor="middle"
+            fontSize={size * 0.073}
             dominantBaseline="central"
-            fill="rgba(236,223,204,0.72)" fontFamily="JetBrains Mono, monospace"
-          >{vs}</text>
+            fill="rgba(236,223,204,0.72)"
+            fontFamily="JetBrains Mono, monospace"
+          >
+            {vs}
+          </text>
         )
       })}
 
       {/* UP / DOWN indicators near needle rest (9 o'clock) */}
       <line
-        x1={cx - r * 0.58} y1={cy - size * 0.06}
-        x2={cx - r * 0.3}  y2={cy - size * 0.06}
-        stroke="rgba(236,223,204,0.28)" strokeWidth={0.8}
+        x1={cx - r * 0.58}
+        y1={cy - size * 0.06}
+        x2={cx - r * 0.3}
+        y2={cy - size * 0.06}
+        stroke="rgba(236,223,204,0.28)"
+        strokeWidth={0.8}
       />
-      <text x={cx - r * 0.27} y={cy - size * 0.04}
-        textAnchor="start" fontSize={size * 0.055}
+      <text
+        x={cx - r * 0.27}
+        y={cy - size * 0.04}
+        textAnchor="start"
+        fontSize={size * 0.055}
         dominantBaseline="central"
-        fill="rgba(236,223,204,0.42)" fontFamily="Space Grotesk, sans-serif" letterSpacing="0.08em"
-      >UP</text>
+        fill="rgba(236,223,204,0.42)"
+        fontFamily="Space Grotesk, sans-serif"
+        letterSpacing="0.08em"
+      >
+        UP
+      </text>
 
       <line
-        x1={cx - r * 0.58} y1={cy + size * 0.09}
-        x2={cx - r * 0.3}  y2={cy + size * 0.09}
-        stroke="rgba(236,223,204,0.28)" strokeWidth={0.8}
+        x1={cx - r * 0.58}
+        y1={cy + size * 0.09}
+        x2={cx - r * 0.3}
+        y2={cy + size * 0.09}
+        stroke="rgba(236,223,204,0.28)"
+        strokeWidth={0.8}
       />
-      <text x={cx - r * 0.27} y={cy + size * 0.11}
-        textAnchor="start" fontSize={size * 0.055}
+      <text
+        x={cx - r * 0.27}
+        y={cy + size * 0.11}
+        textAnchor="start"
+        fontSize={size * 0.055}
         dominantBaseline="central"
-        fill="rgba(236,223,204,0.42)" fontFamily="Space Grotesk, sans-serif" letterSpacing="0.08em"
-      >DOWN</text>
+        fill="rgba(236,223,204,0.42)"
+        fontFamily="Space Grotesk, sans-serif"
+        letterSpacing="0.08em"
+      >
+        DOWN
+      </text>
 
       {/* Needle - drawn pointing right, rotated to correct position */}
       <g transform={`rotate(${svgNeedleAngle}, ${cx}, ${cy})`}>
         <line
-          x1={cx} y1={cy}
-          x2={cx + r * 0.74} y2={cy}
+          x1={cx}
+          y1={cy}
+          x2={cx + r * 0.74}
+          y2={cy}
           stroke={needleColor}
           strokeWidth={2}
           strokeLinecap="round"
         />
         <line
-          x1={cx} y1={cy}
-          x2={cx - r * 0.18} y2={cy}
+          x1={cx}
+          y1={cy}
+          x2={cx - r * 0.18}
+          y2={cy}
           stroke={needleColor}
           strokeWidth={3.5}
           strokeLinecap="round"
@@ -142,19 +195,29 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
       </g>
 
       {/* Center cap */}
-      <circle cx={cx} cy={cy} r={size * 0.05} fill="#2a2e28" stroke="rgba(236,223,204,0.3)" strokeWidth={1.5} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={size * 0.05}
+        fill="#2a2e28"
+        stroke="rgba(236,223,204,0.3)"
+        strokeWidth={1.5}
+      />
 
       {/* Digital readout box */}
       <rect
-        x={cx - 25} y={cy + r * 0.3}
-        width={50} height={19}
+        x={cx - 25}
+        y={cy + r * 0.3}
+        width={50}
+        height={19}
         fill="#0a0c09"
         stroke="rgba(236,223,204,0.2)"
         strokeWidth={1}
         rx={2}
       />
       <text
-        x={cx} y={cy + r * 0.3 + 9.5}
+        x={cx}
+        y={cy + r * 0.3 + 9.5}
         textAnchor="middle"
         dominantBaseline="central"
         fontSize={size * 0.105}
@@ -163,10 +226,12 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
         fontFamily="JetBrains Mono, monospace"
         letterSpacing="-0.02em"
       >
-        {vspeed >= 0 ? '+' : ''}{vspeed.toFixed(1)}
+        {vspeed >= 0 ? '+' : ''}
+        {vspeed.toFixed(1)}
       </text>
       <text
-        x={cx} y={cy + r * 0.3 + 26}
+        x={cx}
+        y={cy + r * 0.3 + 26}
         textAnchor="middle"
         dominantBaseline="central"
         fontSize={size * 0.055}
@@ -182,7 +247,7 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
 
 // heading: raw 0-360° value. Unwrap computed during render, applied via JSX style.
 function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }) {
-  const rawHeading = ((heading % 360) + 360) % 360  // 0-360 for digital display
+  const rawHeading = ((heading % 360) + 360) % 360 // 0-360 for digital display
   const cx = size / 2
   const cy = size / 2
   const r = size * 0.42
@@ -212,7 +277,7 @@ function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }
     { label: 'S', deg: 180 },
     { label: 'SW', deg: 225 },
     { label: 'W', deg: 270 },
-    { label: 'NW', deg: 315 },
+    { label: 'NW', deg: 315 }
   ]
 
   const polarToXY = (angleDeg: number, radius: number) => {
@@ -244,18 +309,29 @@ function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }
 
       {/* Rotating compass card */}
       <g clipPath={`url(#${id}-clip)`}>
-        <g style={{ transform: `rotate(${-accRef.current}deg)`, transformOrigin: `${cx}px ${cy}px`, transition: 'none' }}>
+        <g
+          style={{
+            transform: `rotate(${-accRef.current}deg)`,
+            transformOrigin: `${cx}px ${cy}px`,
+            transition: 'none'
+          }}
+        >
           {/* Ticks */}
           {ticks.map((deg) => {
             const isMajor = deg % 90 === 0
             const isMed = deg % 30 === 0
             const outer = polarToXY(deg, r - 2)
-            const inner = polarToXY(deg, r - (isMajor ? size * 0.14 : isMed ? size * 0.09 : size * 0.05))
+            const inner = polarToXY(
+              deg,
+              r - (isMajor ? size * 0.14 : isMed ? size * 0.09 : size * 0.05)
+            )
             return (
               <line
                 key={deg}
-                x1={outer.x} y1={outer.y}
-                x2={inner.x} y2={inner.y}
+                x1={outer.x}
+                y1={outer.y}
+                x2={inner.x}
+                y2={inner.y}
                 stroke="rgba(236,223,204,0.55)"
                 strokeWidth={isMajor ? 1.5 : 0.7}
               />
@@ -270,7 +346,8 @@ function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }
             return (
               <text
                 key={label}
-                x={pos.x} y={pos.y + 3}
+                x={pos.x}
+                y={pos.y + 3}
                 textAnchor="middle"
                 fontSize={isCardinal ? size * 0.085 : size * 0.055}
                 fontWeight={isCardinal ? 700 : 400}
@@ -291,19 +368,29 @@ function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }
       />
 
       {/* Center cap */}
-      <circle cx={cx} cy={cy} r={size * 0.04} fill="#3C3D37" stroke="rgba(236,223,204,0.3)" strokeWidth={1} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={size * 0.04}
+        fill="#3C3D37"
+        stroke="rgba(236,223,204,0.3)"
+        strokeWidth={1}
+      />
 
       {/* Digital heading box - opaque background covers S/SE/SW rotating labels */}
       <rect
-        x={cx - 25} y={cy + r * 0.3}
-        width={50} height={19}
+        x={cx - 25}
+        y={cy + r * 0.3}
+        width={50}
+        height={19}
         fill="#0a0c09"
         stroke="rgba(236,223,204,0.2)"
         strokeWidth={1}
         rx={2}
       />
       <text
-        x={cx} y={cy + r * 0.3 + 9.5}
+        x={cx}
+        y={cy + r * 0.3 + 9.5}
         textAnchor="middle"
         dominantBaseline="central"
         fontSize={size * 0.105}
@@ -391,64 +478,111 @@ export function InstrumentsPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
       {/* Content */}
       {!collapsed && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '12px 16px',
-          gap: '0px'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '12px 16px',
+            gap: '0px'
+          }}
+        >
           {/* Airspeed */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
+          >
             <AirspeedIndicator airspeed={airspeed} size={140} />
-            <span style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: '9px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              color: 'rgba(236, 223, 204, 0.35)'
-            }}>AIRSPEED</span>
+            <span
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: '9px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: 'rgba(236, 223, 204, 0.35)'
+              }}
+            >
+              AIRSPEED
+            </span>
           </div>
 
-          <div style={{ width: '1px', height: '120px', background: 'rgba(236, 223, 204, 0.08)', margin: '0 8px' }} />
+          <div
+            style={{
+              width: '1px',
+              height: '120px',
+              background: 'rgba(236, 223, 204, 0.08)',
+              margin: '0 8px'
+            }}
+          />
 
           {/* Altitude */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
+          >
             <AltimeterIndicator altitude={altitude} size={140} />
-            <span style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: '9px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              color: 'rgba(236, 223, 204, 0.35)'
-            }}>ALTITUDE</span>
+            <span
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: '9px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: 'rgba(236, 223, 204, 0.35)'
+              }}
+            >
+              ALTITUDE
+            </span>
           </div>
 
-          <div style={{ width: '1px', height: '120px', background: 'rgba(236, 223, 204, 0.08)', margin: '0 8px' }} />
+          <div
+            style={{
+              width: '1px',
+              height: '120px',
+              background: 'rgba(236, 223, 204, 0.08)',
+              margin: '0 8px'
+            }}
+          />
 
           {/* Heading */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
+          >
             <HeadingDial heading={heading} size={140} />
-            <span style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: '9px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              color: 'rgba(236, 223, 204, 0.35)'
-            }}>HEADING</span>
+            <span
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: '9px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: 'rgba(236, 223, 204, 0.35)'
+              }}
+            >
+              HEADING
+            </span>
           </div>
 
-          <div style={{ width: '1px', height: '120px', background: 'rgba(236, 223, 204, 0.08)', margin: '0 8px' }} />
+          <div
+            style={{
+              width: '1px',
+              height: '120px',
+              background: 'rgba(236, 223, 204, 0.08)',
+              margin: '0 8px'
+            }}
+          />
 
           {/* V/Speed */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
+          >
             <VsiIndicator vspeed={vspeed} size={140} />
-            <span style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: '9px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              color: 'rgba(236, 223, 204, 0.35)'
-            }}>VERTICAL SPEED</span>
+            <span
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: '9px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: 'rgba(236, 223, 204, 0.35)'
+              }}
+            >
+              VERTICAL SPEED
+            </span>
           </div>
         </div>
       )}

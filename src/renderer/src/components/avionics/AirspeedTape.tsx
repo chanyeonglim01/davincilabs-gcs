@@ -53,9 +53,7 @@ export function AirspeedTape(): React.ReactElement {
 
       {/* Label */}
       <div className="absolute bottom-2 left-0 right-0 text-center">
-        <span className="text-[10px] font-semibold text-text-secondary tracking-wider">
-          IAS
-        </span>
+        <span className="text-[10px] font-semibold text-text-secondary tracking-wider">IAS</span>
       </div>
     </div>
   )

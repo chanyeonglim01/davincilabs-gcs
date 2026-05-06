@@ -4,11 +4,7 @@
  */
 
 import { ipcMain } from 'electron'
-import type {
-  Command,
-  CommandResult,
-  ConnectionConfig
-} from '../../renderer/src/types'
+import type { Command, CommandResult, ConnectionConfig } from '../../renderer/src/types'
 import { getMavlinkConnection } from '../mavlink/connection'
 import { getMavlinkParser } from '../mavlink/parser'
 import { commandToBuffer, getCommandDescription } from '../mavlink/commander'
@@ -34,18 +30,21 @@ export function registerCommandHandlers(): void {
   })
 
   // Reconnect to new host:port
-  ipcMain.handle('mavlink:reconnect', async (_event, { host, port }: { host: string; port: number }) => {
-    try {
-      const connection = getMavlinkConnection()
-      await connection.reconnect(host, port)
-      sendLogMessage('info', `Reconnected to ${host}:${port}`)
-      return { success: true }
-    } catch (err) {
-      const error = err instanceof Error ? err.message : 'Reconnect failed'
-      sendLogMessage('error', `Reconnect failed: ${error}`)
-      return { success: false, error }
+  ipcMain.handle(
+    'mavlink:reconnect',
+    async (_event, { host, port }: { host: string; port: number }) => {
+      try {
+        const connection = getMavlinkConnection()
+        await connection.reconnect(host, port)
+        sendLogMessage('info', `Reconnected to ${host}:${port}`)
+        return { success: true }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Reconnect failed'
+        sendLogMessage('error', `Reconnect failed: ${error}`)
+        return { success: false, error }
+      }
     }
-  })
+  )
 
   // Disconnect from MAVLink
   ipcMain.handle('mavlink:disconnect', async (_event) => {

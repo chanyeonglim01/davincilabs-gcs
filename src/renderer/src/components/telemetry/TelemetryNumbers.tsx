@@ -18,7 +18,15 @@ export function TelemetryNumbers() {
   const distToWP = telemetry.position.distance_to_wp?.toFixed(2) || '0.00'
   const distToMAV = '320.34' // TODO: Calculate actual distance
 
-  const MetricDisplay = ({ label, value, unit }: { label: string; value: string; unit: string }) => (
+  const MetricDisplay = ({
+    label,
+    value,
+    unit
+  }: {
+    label: string
+    value: string
+    unit: string
+  }) => (
     <div className="flex flex-col items-center justify-center p-3 bg-surface-elevated rounded border border-border">
       <div className="text-xs text-text-tertiary mb-1">{label}</div>
       <div className="text-3xl font-bold text-secondary">{value}</div>

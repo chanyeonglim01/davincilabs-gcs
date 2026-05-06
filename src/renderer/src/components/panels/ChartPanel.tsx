@@ -14,43 +14,56 @@ const CHARTS = [
   {
     id: 'attitude',
     title: 'ATTITUDE',
-    formatter: (v: number | undefined) => v != null ? `${v.toFixed(1)}°` : '--',
+    formatter: (v: number | undefined) => (v != null ? `${v.toFixed(1)}°` : '--'),
     domain: [-90, 90] as [number, number],
     series: [
-      { key: 'roll',  label: 'ROLL' },
+      { key: 'roll', label: 'ROLL' },
       { key: 'pitch', label: 'PITCH' },
-      { key: 'yaw',   label: 'YAW' },
+      { key: 'yaw', label: 'YAW' }
     ]
   },
   {
     id: 'rate',
     title: 'RATE',
-    formatter: (v: number | undefined) => v != null ? `${v.toFixed(1)}°/s` : '--',
+    formatter: (v: number | undefined) => (v != null ? `${v.toFixed(1)}°/s` : '--'),
     domain: [-60, 60] as [number, number],
     series: [
-      { key: 'rollrate',  label: 'ROLL' },
+      { key: 'rollrate', label: 'ROLL' },
       { key: 'pitchrate', label: 'PITCH' },
-      { key: 'yawrate',   label: 'YAW' },
+      { key: 'yawrate', label: 'YAW' }
     ]
   },
   {
     id: 'speed',
     title: 'SPEED',
-    formatter: (v: number | undefined) => v != null ? `${v.toFixed(1)} m/s` : '--',
+    formatter: (v: number | undefined) => (v != null ? `${v.toFixed(1)} m/s` : '--'),
     domain: [0, 40] as [number, number],
     series: [
       { key: 'gndspd', label: 'GND' },
-      { key: 'airspd', label: 'AIR' },
+      { key: 'airspd', label: 'AIR' }
     ]
   }
 ]
 
 type VisibleState = Record<string, boolean>
 
-function SeriesToggle({ label, active, color, onClick }: { label: string; active: boolean; color: string; onClick: () => void }) {
+function SeriesToggle({
+  label,
+  active,
+  color,
+  onClick
+}: {
+  label: string
+  active: boolean
+  color: string
+  onClick: () => void
+}) {
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); onClick() }}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
       style={{
         fontFamily: "'Space Grotesk', sans-serif",
         fontSize: '9px',
@@ -75,12 +88,19 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const { history } = useTelemetryStore()
   const [size, setSize] = useState({ width: 320, height: 260 })
   const [chartCollapsed, setChartCollapsed] = useState<Record<string, boolean>>({
-    attitude: false, rate: false, speed: false
+    attitude: false,
+    rate: false,
+    speed: false
   })
   const [visible, setVisible] = useState<VisibleState>({
-    roll: true, pitch: true, yaw: false,
-    rollrate: true, pitchrate: true, yawrate: false,
-    gndspd: true, airspd: true,
+    roll: true,
+    pitch: true,
+    yaw: false,
+    rollrate: true,
+    pitchrate: true,
+    yawrate: false,
+    gndspd: true,
+    airspd: true
   })
   const resizing = useRef(false)
   const resizeStart = useRef({ x: 0, y: 0, w: 320, h: 260 })
@@ -91,9 +111,8 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const SUBHEADER_HEIGHT = 32 // px per chart section header
   const openCount = CHARTS.filter((c) => !chartCollapsed[c.id]).length
   const totalHeadersHeight = CHARTS.length * SUBHEADER_HEIGHT
-  const perChartHeight = openCount > 0
-    ? Math.max(60, Math.floor((size.height - totalHeadersHeight) / openCount))
-    : 0
+  const perChartHeight =
+    openCount > 0 ? Math.max(60, Math.floor((size.height - totalHeadersHeight) / openCount)) : 0
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -105,7 +124,9 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
         height: Math.max(120, resizeStart.current.h + dy)
       })
     }
-    const onMouseUp = () => { resizing.current = false }
+    const onMouseUp = () => {
+      resizing.current = false
+    }
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
     return () => {
@@ -123,14 +144,14 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
   const chartData = history.slice(-60).map((d) => ({
     t: d.timestamp,
-    roll:      parseFloat(((d.attitude.roll      * 180) / Math.PI).toFixed(1)),
-    pitch:     parseFloat(((d.attitude.pitch     * 180) / Math.PI).toFixed(1)),
-    yaw:       parseFloat(((d.attitude.yaw       * 180) / Math.PI).toFixed(1)),
-    rollrate:  parseFloat(((d.attitude.rollspeed  * 180) / Math.PI).toFixed(1)),
+    roll: parseFloat(((d.attitude.roll * 180) / Math.PI).toFixed(1)),
+    pitch: parseFloat(((d.attitude.pitch * 180) / Math.PI).toFixed(1)),
+    yaw: parseFloat(((d.attitude.yaw * 180) / Math.PI).toFixed(1)),
+    rollrate: parseFloat(((d.attitude.rollspeed * 180) / Math.PI).toFixed(1)),
     pitchrate: parseFloat(((d.attitude.pitchspeed * 180) / Math.PI).toFixed(1)),
-    yawrate:   parseFloat(((d.attitude.yawspeed   * 180) / Math.PI).toFixed(1)),
-    gndspd:    parseFloat(d.velocity.groundspeed.toFixed(1)),
-    airspd:    parseFloat(d.velocity.airspeed.toFixed(1)),
+    yawrate: parseFloat(((d.attitude.yawspeed * 180) / Math.PI).toFixed(1)),
+    gndspd: parseFloat(d.velocity.groundspeed.toFixed(1)),
+    airspd: parseFloat(d.velocity.airspeed.toFixed(1))
   }))
 
   return (
@@ -165,18 +186,40 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
             {[0, 1, 2].map((i) => (
               <div key={i} style={{ display: 'flex', gap: '2px' }}>
                 {[0, 1].map((j) => (
-                  <div key={j} style={{ width: '2px', height: '2px', borderRadius: '50%', background: '#ECDFCC' }} />
+                  <div
+                    key={j}
+                    style={{
+                      width: '2px',
+                      height: '2px',
+                      borderRadius: '50%',
+                      background: '#ECDFCC'
+                    }}
+                  />
                 ))}
               </div>
             ))}
           </div>
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: '9px', fontWeight: 600, color: 'rgba(236, 223, 204, 0.45)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+          <span
+            style={{
+              fontFamily: "'Space Grotesk', sans-serif",
+              fontSize: '9px',
+              fontWeight: 600,
+              color: 'rgba(236, 223, 204, 0.45)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em'
+            }}
+          >
             CHARTS
           </span>
         </div>
         <span
           onClick={onToggle}
-          style={{ color: 'rgba(236, 223, 204, 0.3)', fontSize: '10px', cursor: 'pointer', padding: '0 4px' }}
+          style={{
+            color: 'rgba(236, 223, 204, 0.3)',
+            fontSize: '10px',
+            cursor: 'pointer',
+            padding: '0 4px'
+          }}
         >
           {collapsed ? '▲' : '▼'}
         </span>
@@ -189,7 +232,7 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
               <div
                 key={chart.id}
                 style={{
-                  borderTop: ci > 0 ? '1px solid rgba(236, 223, 204, 0.06)' : 'none',
+                  borderTop: ci > 0 ? '1px solid rgba(236, 223, 204, 0.06)' : 'none'
                 }}
               >
                 {/* Sub-header — click title to toggle chart */}
@@ -208,7 +251,16 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
                     <span style={{ color: 'rgba(236, 223, 204, 0.25)', fontSize: '8px' }}>
                       {chartCollapsed[chart.id] ? '▶' : '▼'}
                     </span>
-                    <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: '8px', fontWeight: 600, color: 'rgba(236, 223, 204, 0.4)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+                    <span
+                      style={{
+                        fontFamily: "'Space Grotesk', sans-serif",
+                        fontSize: '8px',
+                        fontWeight: 600,
+                        color: 'rgba(236, 223, 204, 0.4)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.12em'
+                      }}
+                    >
                       {chart.title}
                     </span>
                   </div>
@@ -231,12 +283,19 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
                 {!chartCollapsed[chart.id] && (
                   <div style={{ padding: '0 0 6px' }}>
                     <ResponsiveContainer width="100%" height={perChartHeight}>
-                      <LineChart data={chartData} margin={{ top: 2, right: 8, left: -24, bottom: 0 }}>
+                      <LineChart
+                        data={chartData}
+                        margin={{ top: 2, right: 8, left: -24, bottom: 0 }}
+                      >
                         <XAxis dataKey="t" hide />
                         <YAxis
                           domain={chart.domain}
                           tickCount={3}
-                          tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, fill: 'rgba(236, 223, 204, 0.3)' }}
+                          tick={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: 8,
+                            fill: 'rgba(236, 223, 204, 0.3)'
+                          }}
                           tickLine={false}
                           axisLine={false}
                         />

@@ -22,7 +22,7 @@ export function SurveyConfigPanel({
   previewResult,
   onPreview,
   onApply,
-  onCancel,
+  onCancel
 }: SurveyConfigPanelProps) {
   const set = (key: keyof SurveyGridParams, value: number) =>
     onParamChange({ ...params, [key]: value })
@@ -41,19 +41,26 @@ export function SurveyConfigPanel({
         width: '220px',
         boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
         backdropFilter: 'blur(16px)',
-        overflow: 'hidden',
+        overflow: 'hidden'
       }}
     >
       {/* Header */}
-      <div style={{
-        padding: '8px 12px',
-        borderBottom: '1px solid rgba(236,223,204,0.08)',
-        background: 'rgba(179,157,219,0.06)',
-      }}>
-        <span style={{
-          fontFamily: mono, fontSize: '9px', fontWeight: 700,
-          letterSpacing: '0.12em', color: '#B39DDB',
-        }}>
+      <div
+        style={{
+          padding: '8px 12px',
+          borderBottom: '1px solid rgba(236,223,204,0.08)',
+          background: 'rgba(179,157,219,0.06)'
+        }}
+      >
+        <span
+          style={{
+            fontFamily: mono,
+            fontSize: '9px',
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            color: '#B39DDB'
+          }}
+        >
           SURVEY GRID CONFIG
         </span>
       </div>
@@ -100,15 +107,17 @@ export function SurveyConfigPanel({
 
       {/* Stats */}
       {previewResult && (
-        <div style={{
-          padding: '6px 12px',
-          borderTop: '1px solid rgba(236,223,204,0.06)',
-          borderBottom: '1px solid rgba(236,223,204,0.06)',
-          background: 'rgba(0,0,0,0.2)',
-          display: 'flex',
-          gap: '12px',
-          alignItems: 'center',
-        }}>
+        <div
+          style={{
+            padding: '6px 12px',
+            borderTop: '1px solid rgba(236,223,204,0.06)',
+            borderBottom: '1px solid rgba(236,223,204,0.06)',
+            background: 'rgba(0,0,0,0.2)',
+            display: 'flex',
+            gap: '12px',
+            alignItems: 'center'
+          }}
+        >
           <span style={{ fontFamily: mono, fontSize: '9px', color: '#B39DDB', fontWeight: 700 }}>
             {previewResult.waypoints.length} WPs
           </span>
@@ -119,13 +128,15 @@ export function SurveyConfigPanel({
       )}
 
       {/* Actions */}
-      <div style={{
-        padding: '8px 12px',
-        display: 'flex',
-        gap: '6px',
-      }}>
+      <div
+        style={{
+          padding: '8px 12px',
+          display: 'flex',
+          gap: '6px'
+        }}
+      >
         <ActionBtn label="PREVIEW" color="#B39DDB" onClick={onPreview} />
-        <ActionBtn label="CANCEL"  color="rgba(236,223,204,0.4)" onClick={onCancel} />
+        <ActionBtn label="CANCEL" color="rgba(236,223,204,0.4)" onClick={onCancel} />
         <ActionBtn
           label="APPLY"
           color="#4FC3F7"
@@ -151,11 +162,14 @@ interface ParamRowProps {
 function ParamRow({ label, unit, value, min, max, step, onChange }: ParamRowProps) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <span style={{
-        fontFamily: sans, fontSize: '10px',
-        color: 'rgba(236,223,204,0.5)',
-        minWidth: '64px',
-      }}>
+      <span
+        style={{
+          fontFamily: sans,
+          fontSize: '10px',
+          color: 'rgba(236,223,204,0.5)',
+          minWidth: '64px'
+        }}
+      >
         {label}
       </span>
       <input
@@ -167,21 +181,26 @@ function ParamRow({ label, unit, value, min, max, step, onChange }: ParamRowProp
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
           flex: 1,
-          fontFamily: mono, fontSize: '11px', fontWeight: 700,
+          fontFamily: mono,
+          fontSize: '11px',
+          fontWeight: 700,
           background: 'rgba(60,61,55,0.5)',
           border: '1px solid rgba(236,223,204,0.12)',
           borderRadius: '3px',
           color: 'rgba(236,223,204,0.85)',
           padding: '3px 6px',
           outline: 'none',
-          textAlign: 'right',
+          textAlign: 'right'
         }}
       />
-      <span style={{
-        fontFamily: mono, fontSize: '9px',
-        color: 'rgba(236,223,204,0.3)',
-        minWidth: '12px',
-      }}>
+      <span
+        style={{
+          fontFamily: mono,
+          fontSize: '9px',
+          color: 'rgba(236,223,204,0.3)',
+          minWidth: '12px'
+        }}
+      >
         {unit}
       </span>
     </div>
@@ -203,15 +222,18 @@ function ActionBtn({ label, color, onClick, disabled = false, primary = false }:
       disabled={disabled}
       style={{
         flex: primary ? 1.2 : 1,
-        fontFamily: mono, fontSize: '9px', fontWeight: 700,
-        letterSpacing: '0.08em', textTransform: 'uppercase',
+        fontFamily: mono,
+        fontSize: '9px',
+        fontWeight: 700,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
         padding: '5px 4px',
         background: primary && !disabled ? `${color}14` : 'transparent',
         border: `1px solid ${disabled ? 'rgba(236,223,204,0.1)' : color + (primary ? '50' : '30')}`,
         borderRadius: '4px',
         color: disabled ? 'rgba(236,223,204,0.2)' : color,
         cursor: disabled ? 'default' : 'pointer',
-        transition: 'all 0.12s ease',
+        transition: 'all 0.12s ease'
       }}
     >
       {label}

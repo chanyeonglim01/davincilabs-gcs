@@ -16,6 +16,7 @@ export const useTelemetryStore = create<TelemetryStore>((set) => ({
   telemetry: null,
   connection: {
     connected: false,
+    linkState: 'DISCONNECTED',
     mode: 'simulink',
     host: '127.0.0.1',
     port: 14551,

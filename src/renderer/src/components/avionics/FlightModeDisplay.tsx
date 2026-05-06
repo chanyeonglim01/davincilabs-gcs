@@ -18,9 +18,7 @@ export function FlightModeDisplay() {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Connection</span>
-          <span
-            className={`font-bold ${connection.connected ? 'text-green-500' : 'text-red-500'}`}
-          >
+          <span className={`font-bold ${connection.connected ? 'text-green-500' : 'text-red-500'}`}>
             {connection.connected ? 'CONNECTED' : 'DISCONNECTED'}
           </span>
         </div>

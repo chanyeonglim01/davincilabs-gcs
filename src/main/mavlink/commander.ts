@@ -5,6 +5,15 @@
 
 import type { Command } from '../../renderer/src/types'
 import { MAV_CMD } from '../../renderer/src/types'
+import { modeNameToParam2 } from './customModes'
+
+// Single per-link tx sequence counter (0..255 wrap)
+let txSeq = 0
+function nextSeq(): number {
+  const s = txSeq & 0xff
+  txSeq = (txSeq + 1) & 0xff
+  return s
+}
 
 /**
  * Create COMMAND_LONG message buffer
@@ -26,7 +35,7 @@ function createCommandLong(
       msgid: 76, // COMMAND_LONG
       sysid: 255, // GCS system ID
       compid: 190, // MAV_COMP_ID_MISSIONPLANNER
-      seq: 0
+      seq: nextSeq()
     },
     payload: {
       command,
@@ -137,20 +146,8 @@ export function commandToBuffer(command: Command): Buffer {
 
     case 'SET_MODE': {
       const mode = command.params?.mode || 'AUTO.MISSION'
-      const PX4_MODE_MAP: Record<string, number> = {
-        'MANUAL': 1 << 16,
-        'ALTCTL': 2 << 16,
-        'POSCTL': 3 << 16,
-        'AUTO.TAKEOFF': (4 << 16) | (2 << 24),
-        'AUTO.LOITER': (4 << 16) | (3 << 24),
-        'AUTO.MISSION': (4 << 16) | (4 << 24),
-        'AUTO.RTL': (4 << 16) | (5 << 24),
-        'AUTO.LAND': (4 << 16) | (6 << 24),
-        'ACRO': 5 << 16,
-        'OFFBOARD': 6 << 16,
-        'STABILIZED': 7 << 16
-      }
-      const customMode = PX4_MODE_MAP[mode] ?? PX4_MODE_MAP['AUTO.MISSION']
+      // UAM custom mode bit layout — see customModes.ts §1.5
+      const customMode = modeNameToParam2(mode)
       // param1=1 (MAV_MODE_FLAG_CUSTOM_MODE_ENABLED), param2=custom_mode as float
       return createCommandLong(MAV_CMD.DO_SET_MODE, 1, customMode, 0, 0, 0, 0, 0)
     }
