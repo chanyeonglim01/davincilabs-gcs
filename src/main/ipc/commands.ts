@@ -3,13 +3,18 @@
  * Receives commands from Renderer and sends to MAVLink
  */
 
-import { ipcMain } from 'electron'
+import { ipcMain, BrowserWindow } from 'electron'
 import type { Command, CommandResult, ConnectionConfig } from '../../renderer/src/types'
 import { getMavlinkConnection } from '../mavlink/connection'
 import { getMavlinkParser } from '../mavlink/parser'
 import { commandToBuffer, getCommandDescription } from '../mavlink/commander'
 import { MissionUploader } from '../mavlink/mission'
 import type { MissionWaypoint } from '../mavlink/mission'
+import {
+  MissionDownloader,
+  decodeMissionItems,
+  type DownloadedMissionItem
+} from '../mavlink/missionDownloader'
 import { sendLogMessage } from './telemetry'
 
 /**
@@ -138,4 +143,45 @@ export function registerCommandHandlers(): void {
       parser.off('missionAck', onAck)
     }
   })
+
+  // Download mission via MAVLink Mission Protocol
+  ipcMain.handle(
+    'mavlink:download-mission',
+    async (
+      event
+    ): Promise<{ success: boolean; items: DownloadedMissionItem[]; error?: string }> => {
+      const connection = getMavlinkConnection()
+      const parser = getMavlinkParser()
+
+      if (!connection.isConnected) {
+        return { success: false, items: [], error: 'Not connected to vehicle' }
+      }
+
+      const win = BrowserWindow.fromWebContents(event.sender)
+
+      const downloader = new MissionDownloader(connection, parser, (progress) => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('mission:download-progress', progress)
+        }
+      })
+
+      try {
+        const result = await downloader.download()
+        if (result.success) {
+          sendLogMessage('info', `Mission downloaded: ${result.items.length} items`)
+          return { success: true, items: decodeMissionItems(result.items) }
+        }
+        sendLogMessage('error', `Mission download failed: ${result.error}`)
+        return {
+          success: false,
+          items: decodeMissionItems(result.items),
+          error: result.error
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Mission download failed'
+        sendLogMessage('error', `Mission download failed: ${message}`)
+        return { success: false, items: [], error: message }
+      }
+    }
+  )
 }

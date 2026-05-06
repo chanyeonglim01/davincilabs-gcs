@@ -42,6 +42,24 @@ declare global {
           loiterRadius: number
         }[]
       ): Promise<{ success: boolean; count: number; error?: string }>
+      downloadMission(): Promise<{
+        success: boolean
+        items: {
+          seq: number
+          command: number
+          lat: number
+          lon: number
+          alt: number
+          param1: number
+          param2: number
+          param3: number
+          param4: number
+          current: number
+          autocontinue: number
+          frame: number
+        }[]
+        error?: string
+      }>
       listSerialPorts(): Promise<SerialPortInfo[]>
 
       // Listen (Main -> Renderer, callback)
@@ -53,6 +71,9 @@ declare global {
       onParamProgress(callback: (progress: ParamProgress) => void): () => void
       onCommandAck(callback: (result: CommandResult) => void): () => void
       onLogMessage(callback: (entry: LogEntry) => void): () => void
+      onMissionDownloadProgress(
+        callback: (progress: { seq: number; total: number }) => void
+      ): () => void
     }
   }
 }

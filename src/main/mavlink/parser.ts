@@ -65,6 +65,30 @@ function calculateCrc(data: Buffer, msgid: number): number {
   return crc
 }
 
+/**
+ * MISSION_ITEM_INT decoded payload (download).
+ * `lat`/`lon` are stored as 1e7-scaled integers as on the wire so the
+ * downloader can verify against what was originally sent without floating
+ * point loss.
+ */
+export interface MissionItemInt {
+  seq: number
+  command: number
+  frame: number
+  current: number
+  autocontinue: number
+  param1: number
+  param2: number
+  param3: number
+  param4: number
+  /** Latitude * 1e7 (int32) */
+  lat: number
+  /** Longitude * 1e7 (int32) */
+  lon: number
+  /** Altitude in metres (float32) */
+  alt: number
+}
+
 export interface MavlinkParserEvents {
   telemetry: (data: TelemetryData) => void
   homePosition: (home: HomePosition) => void
@@ -74,6 +98,8 @@ export interface MavlinkParserEvents {
   heartbeat: () => void
   missionRequest: (seq: number) => void
   missionAck: (type: number) => void
+  missionCount: (count: number) => void
+  missionItemInt: (item: MissionItemInt) => void
 }
 
 export declare interface MavlinkParser {
@@ -217,6 +243,16 @@ export class MavlinkParser extends EventEmitter {
         offComp = 11
         break
       }
+      case 44: {
+        // MISSION_COUNT: count(2) + target_system(1) + target_component(1)
+        offSys = 10 + 2
+        offComp = offSys + 1
+        break
+      }
+      case 73:
+        // MISSION_ITEM_INT carries target_system/target_component but most
+        // autopilots broadcast it; accept regardless.
+        return true
       case 40: // MISSION_REQUEST (legacy)
       case 51: {
         // MISSION_REQUEST_INT: target_system(1) + target_component(1) + seq(2)
@@ -246,7 +282,8 @@ export class MavlinkParser extends EventEmitter {
     // (Appending zeros to the END of the packet is wrong — CRC sits right
     //  after the truncated payload, so fixed offsets would read CRC bytes.)
     const payloadLen = packet[1]
-    const paddedPayload = Buffer.alloc(40) // covers all msg types we handle
+    // 40 bytes covers all decoded message types up through MISSION_ITEM_INT (38B).
+    const paddedPayload = Buffer.alloc(40)
     packet.copy(paddedPayload, 0, 10, 10 + payloadLen)
     const safe = Buffer.concat([packet.subarray(0, 10), paddedPayload])
 
@@ -281,6 +318,12 @@ export class MavlinkParser extends EventEmitter {
         break
       case 47: // MISSION_ACK
         this.emit('missionAck', safe.readUInt8(12))
+        break
+      case 44: // MISSION_COUNT
+        this.handleMissionCount(safe)
+        break
+      case 73: // MISSION_ITEM_INT (download response)
+        this.handleMissionItemInt(safe)
         break
       default:
       // console.log(`[MAVLink Parser] Unhandled msgid: ${msgid}`)
@@ -455,6 +498,50 @@ export class MavlinkParser extends EventEmitter {
     }
 
     this.emit('commandAck', commandResult)
+  }
+
+  /**
+   * Handle MISSION_COUNT (msgid 44).
+   * Payload: count(uint16) + target_system + target_component + mission_type
+   */
+  private handleMissionCount(packet: Buffer): void {
+    const count = packet.readUInt16LE(10)
+    this.emit('missionCount', count)
+  }
+
+  /**
+   * Handle MISSION_ITEM_INT (msgid 73). Mirror of mission.ts encoder layout.
+   * Payload (38B):
+   *   param1..4 (float32)        @ 0,4,8,12
+   *   x (int32, lat*1e7)         @ 16
+   *   y (int32, lon*1e7)         @ 20
+   *   z (float32, altitude m)    @ 24
+   *   seq (uint16)               @ 28
+   *   command (uint16)           @ 30
+   *   target_system (uint8)      @ 32
+   *   target_component (uint8)   @ 33
+   *   frame (uint8)              @ 34
+   *   current (uint8)            @ 35
+   *   autocontinue (uint8)       @ 36
+   *   mission_type (uint8)       @ 37
+   */
+  private handleMissionItemInt(packet: Buffer): void {
+    const item: MissionItemInt = {
+      param1: packet.readFloatLE(10),
+      param2: packet.readFloatLE(14),
+      param3: packet.readFloatLE(18),
+      param4: packet.readFloatLE(22),
+      lat: packet.readInt32LE(26),
+      lon: packet.readInt32LE(30),
+      alt: packet.readFloatLE(34),
+      seq: packet.readUInt16LE(38),
+      command: packet.readUInt16LE(40),
+      // bytes 42 (target_system), 43 (target_component) ignored
+      frame: packet.readUInt8(44),
+      current: packet.readUInt8(45),
+      autocontinue: packet.readUInt8(46)
+    }
+    this.emit('missionItemInt', item)
   }
 
   /**

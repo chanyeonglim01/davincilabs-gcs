@@ -46,6 +46,24 @@ const mavlinkAPI = {
     }[]
   ): Promise<{ success: boolean; count: number; error?: string }> =>
     ipcRenderer.invoke('mavlink:upload-mission', waypoints),
+  downloadMission: (): Promise<{
+    success: boolean
+    items: {
+      seq: number
+      command: number
+      lat: number
+      lon: number
+      alt: number
+      param1: number
+      param2: number
+      param3: number
+      param4: number
+      current: number
+      autocontinue: number
+      frame: number
+    }[]
+    error?: string
+  }> => ipcRenderer.invoke('mavlink:download-mission'),
   listSerialPorts: (): Promise<SerialPortInfo[]> => ipcRenderer.invoke('serial:list-ports'),
 
   // Listen (Main -> Renderer)
@@ -91,6 +109,15 @@ const mavlinkAPI = {
     const listener = (_event: Electron.IpcRendererEvent, entry: LogEntry) => callback(entry)
     ipcRenderer.on('log-message', listener)
     return () => ipcRenderer.removeListener('log-message', listener)
+  },
+
+  onMissionDownloadProgress: (callback: (progress: { seq: number; total: number }) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: { seq: number; total: number }
+    ): void => callback(progress)
+    ipcRenderer.on('mission:download-progress', listener)
+    return () => ipcRenderer.removeListener('mission:download-progress', listener)
   }
 }
 

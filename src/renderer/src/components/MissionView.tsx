@@ -314,6 +314,11 @@ export function MissionView() {
   const [selectedUid, setSelectedUid] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadMsg, setDownloadMsg] = useState<string | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<{ seq: number; total: number } | null>(
+    null
+  )
   const [mapMode, setMapMode] = useState<MapMode>('2d')
   const [tileMode, setTileMode] = useState<TileMode>('satellite')
   const [cesiumCenter, setCesiumCenter] = useState<{
@@ -876,6 +881,43 @@ export function MissionView() {
     }
   }
 
+  // Subscribe to mission download progress while a download is active.
+  useEffect((): (() => void) | undefined => {
+    if (!window.mavlink?.onMissionDownloadProgress) return undefined
+    const off = window.mavlink.onMissionDownloadProgress((p): void => {
+      setDownloadProgress(p)
+    })
+    return off
+  }, [])
+
+  const handleDownload = async (): Promise<void> => {
+    if (!window.mavlink?.downloadMission) return
+    setDownloading(true)
+    setDownloadMsg(null)
+    setDownloadProgress(null)
+    try {
+      const result = await window.mavlink.downloadMission()
+      if (result.success) {
+        const localCount = waypoints.length
+        const remoteCount = result.items.length
+        if (localCount === 0) {
+          setDownloadMsg(`✓ ${remoteCount} items on drone (local empty)`)
+        } else if (localCount === remoteCount) {
+          setDownloadMsg(`✓ Verified ${remoteCount} items match`)
+        } else {
+          setDownloadMsg(`⚠ Mismatch: local=${localCount} remote=${remoteCount}`)
+        }
+      } else {
+        setDownloadMsg(`✗ ${result.error ?? 'Download failed'}`)
+      }
+    } catch (err) {
+      setDownloadMsg(`✗ ${err instanceof Error ? err.message : 'Download failed'}`)
+    } finally {
+      setDownloading(false)
+      setDownloadProgress(null)
+    }
+  }
+
   // ── Stats ─────────────────────────────────────────────────────────────────────
   const distM = totalDistance(waypoints)
   const distStr = distM >= 1000 ? `${(distM / 1000).toFixed(2)} km` : `${Math.round(distM)} m`
@@ -1012,10 +1054,39 @@ export function MissionView() {
           </span>
         )}
 
+        {downloadMsg && (
+          <span
+            style={{
+              fontFamily: mono,
+              fontSize: '10px',
+              color: downloadMsg.startsWith('✓')
+                ? '#A5D6A7'
+                : downloadMsg.startsWith('⚠')
+                  ? '#FFB74D'
+                  : '#E87020'
+            }}
+          >
+            {downloadMsg}
+          </span>
+        )}
+
+        {downloading && downloadProgress && (
+          <span
+            style={{
+              fontFamily: mono,
+              fontSize: '10px',
+              color: 'rgba(236,223,204,0.55)'
+            }}
+          >
+            {`↓ ${downloadProgress.seq}/${downloadProgress.total}`}
+          </span>
+        )}
+
         <button
           onClick={() => {
             clearMission()
             setUploadMsg(null)
+            setDownloadMsg(null)
             handleSurveyCancel()
           }}
           style={{
@@ -1033,6 +1104,27 @@ export function MissionView() {
           }}
         >
           CLEAR
+        </button>
+
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          title="드론 mission_store에 저장된 미션 다운로드 (검증용)"
+          style={{
+            fontFamily: mono,
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            padding: '5px 12px',
+            background: downloading ? 'transparent' : 'rgba(236,223,204,0.06)',
+            border: `1px solid ${downloading ? 'rgba(236,223,204,0.18)' : 'rgba(236,223,204,0.35)'}`,
+            borderRadius: '4px',
+            color: downloading ? 'rgba(236,223,204,0.4)' : '#ECDFCC',
+            cursor: downloading ? 'default' : 'pointer'
+          }}
+        >
+          {downloading ? 'DOWNLOADING…' : 'DOWNLOAD'}
         </button>
 
         <button
