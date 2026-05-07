@@ -53,16 +53,37 @@ export interface SerialPortInfo {
 
 // --- Commands ---
 
-export type CommandType = 'ARM' | 'DISARM' | 'TAKEOFF' | 'LAND' | 'RTL' | 'HOLD' | 'SET_MODE'
+export type CommandType =
+  | 'ARM'
+  | 'DISARM'
+  | 'TAKEOFF'
+  | 'LAND'
+  | 'RTL'
+  | 'HOLD'
+  | 'SET_MODE'
+  | 'MOTOR_TEST'
 
 export interface Command {
   type: CommandType
   params?: CommandParams
 }
 
+/**
+ * MOTOR_TEST throttle units.
+ * - 'percent' encodes throttle as 0..100 % (DO_MOTOR_TEST throttle_type 0)
+ * - 'pwm' encodes throttle as raw PWM µs (DO_MOTOR_TEST throttle_type 1)
+ */
+export type MotorTestThrottleType = 'percent' | 'pwm'
+
 export interface CommandParams {
   altitude?: number // meters, for TAKEOFF
   mode?: string // flight mode name, for SET_MODE
+  // ── MOTOR_TEST ──────────────────────────────────────────────────────────────
+  motor?: number // 1-based motor instance, 0 = ALL (sequential)
+  throttle?: number // value (units depend on throttleType)
+  duration?: number // seconds the motor should spin
+  throttleType?: MotorTestThrottleType // default 'percent'
+  motorCount?: number // for ALL/sequential: number of motors to test (default 6)
 }
 
 export interface CommandResult {
@@ -108,11 +129,26 @@ export interface MainToRendererChannels {
   'log-message': LogEntry
 }
 
+// Motor test IPC payload (mavlink:motor-test)
+export interface MotorTestPayload {
+  motor: number // 1-based, 0 = ALL
+  throttle: number
+  duration: number
+  throttleType?: MotorTestThrottleType
+  motorCount?: number
+}
+
+export interface MotorTestResult {
+  success: boolean
+  error?: string
+}
+
 // Renderer -> Main (invoke via ipcRenderer.invoke)
 export interface RendererToMainChannels {
   'mavlink:connect': ConnectionConfig
   'mavlink:disconnect': void
   'mavlink:send-command': Command
+  'mavlink:motor-test': MotorTestPayload
   'mavlink:request-params': void
   'mavlink:set-param': ParamEntry
   'mavlink:get-connection-status': ConnectionStatus

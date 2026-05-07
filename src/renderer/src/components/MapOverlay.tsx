@@ -8,6 +8,7 @@ import { ChartPanel } from './panels/ChartPanel'
 import { LogPanel } from './panels/LogPanel'
 import { MissionView } from './MissionView'
 import { ParameterView } from '@renderer/features/builder'
+import { TestView } from './test/TestView'
 import { useDraggable } from '@renderer/hooks/useDraggable'
 
 // ─── Draggable wrapper ─────────────────────────────────────────────────────────
@@ -126,6 +127,9 @@ export function MapOverlay() {
 
       {/* ── PARAMETER VIEW ─────────────────────────────────────────────────────── */}
       {currentView === 'parameter' && <ParameterView />}
+
+      {/* ── TEST VIEW ──────────────────────────────────────────────────────────── */}
+      {currentView === 'test' && <TestView />}
     </div>
   )
 }

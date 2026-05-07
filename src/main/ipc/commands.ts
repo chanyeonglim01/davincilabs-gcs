@@ -113,6 +113,50 @@ export function registerCommandHandlers(): void {
     return connection.getStatus()
   })
 
+  // Motor test (DO_MOTOR_TEST / cmd 209)
+  // Convenience channel that wraps a MOTOR_TEST Command so the renderer
+  // does not need to know the high-level Command schema.
+  ipcMain.handle(
+    'mavlink:motor-test',
+    async (
+      _event,
+      payload: {
+        motor: number
+        throttle: number
+        duration: number
+        throttleType?: 'percent' | 'pwm'
+        motorCount?: number
+      }
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const connection = getMavlinkConnection()
+        if (!connection.isConnected) {
+          return { success: false, error: 'Not connected to vehicle' }
+        }
+
+        const cmd: Command = {
+          type: 'MOTOR_TEST',
+          params: {
+            motor: payload.motor,
+            throttle: payload.throttle,
+            duration: payload.duration,
+            throttleType: payload.throttleType ?? 'percent',
+            motorCount: payload.motorCount
+          }
+        }
+
+        const buffer = commandToBuffer(cmd)
+        connection.sendMessage(buffer)
+        sendLogMessage('info', `Command sent: ${getCommandDescription(cmd)}`)
+        return { success: true }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Motor test failed'
+        sendLogMessage('error', `Motor test failed: ${message}`)
+        return { success: false, error: message }
+      }
+    }
+  )
+
   // Upload mission waypoints via MAVLink Mission Protocol
   ipcMain.handle('mavlink:upload-mission', async (_event, waypoints: MissionWaypoint[]) => {
     const connection = getMavlinkConnection()

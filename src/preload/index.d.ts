@@ -14,7 +14,9 @@ import type {
   ParamEntry,
   ParamProgress,
   LogEntry,
-  SerialPortInfo
+  SerialPortInfo,
+  MotorTestPayload,
+  MotorTestResult
 } from '../renderer/src/types'
 
 declare global {
@@ -29,6 +31,7 @@ declare global {
       }): Promise<{ success: boolean; error?: string }>
       disconnect(): Promise<void>
       sendCommand(command: Command): Promise<CommandResult>
+      motorTest(payload: MotorTestPayload): Promise<MotorTestResult>
       requestParams(): Promise<void>
       setParam(param: ParamEntry): Promise<void>
       getConnectionStatus(): Promise<ConnectionStatus>

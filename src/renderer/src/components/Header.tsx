@@ -4,12 +4,13 @@ import logoSrc from '@renderer/assets/images/dl_logo.png'
 import type { LinkState, SerialPortInfo } from '@renderer/types'
 
 type ConnMode = 'udp' | 'com'
-export type ViewType = 'main' | 'mission' | 'parameter'
+export type ViewType = 'main' | 'mission' | 'parameter' | 'test'
 
 const VIEW_LABELS: Record<ViewType, string> = {
   main: 'MAIN',
   mission: 'MISSION',
-  parameter: 'PARAMETER'
+  parameter: 'PARAMETER',
+  test: 'TEST'
 }
 
 const BAUDRATES = [9600, 57600, 115200, 230400, 921600] as const
@@ -287,7 +288,7 @@ export function Header({ currentView, onViewChange }: HeaderProps): React.JSX.El
               backdropFilter: 'blur(16px)'
             }}
           >
-            {(['main', 'mission', 'parameter'] as ViewType[]).map((v) => (
+            {(['main', 'mission', 'parameter', 'test'] as ViewType[]).map((v) => (
               <div
                 key={v}
                 onClick={() => {

@@ -53,12 +53,16 @@ function createCommandLong(
   }
 
   // Serialize to MAVLink v2 buffer
-  // node-mavlink doesn't have a direct serialize method, so we'll construct manually
-  const buffer = Buffer.alloc(41) // MAVLink v2 header (10) + COMMAND_LONG payload (30) + checksum (2)
+  // COMMAND_LONG payload = 7 floats (28) + uint16 command (2) + 3 uint8 (3) = 33 bytes
+  // Total wire size = 10 header + 33 payload + 2 CRC = 45 bytes
+  const COMMAND_LONG_PAYLOAD_LEN = 33
+  const HEADER_LEN = 10
+  const CRC_LEN = 2
+  const buffer = Buffer.alloc(HEADER_LEN + COMMAND_LONG_PAYLOAD_LEN + CRC_LEN)
 
   // MAVLink v2 header
   buffer.writeUInt8(0xfd, 0) // Magic byte v2
-  buffer.writeUInt8(30, 1) // Payload length
+  buffer.writeUInt8(COMMAND_LONG_PAYLOAD_LEN, 1) // Payload length
   buffer.writeUInt8(0, 2) // Incompat flags
   buffer.writeUInt8(0, 3) // Compat flags
   buffer.writeUInt8(message.header.seq, 4)
@@ -93,9 +97,11 @@ function createCommandLong(
   buffer.writeUInt8(message.payload.confirmation, offset)
   offset += 1
 
-  // Checksum (simplified - in production, use proper CRC-16/MCRF4XX)
-  const checksum = calculateChecksum(buffer.subarray(1, 40))
-  buffer.writeUInt16LE(checksum, 40)
+  // Checksum (CRC-16/MCRF4XX over [seq..end-of-payload], with CRC_EXTRA appended)
+  const crcStart = 1
+  const crcEnd = HEADER_LEN + COMMAND_LONG_PAYLOAD_LEN
+  const checksum = calculateChecksum(buffer.subarray(crcStart, crcEnd))
+  buffer.writeUInt16LE(checksum, crcEnd)
 
   return buffer
 }
@@ -152,8 +158,35 @@ export function commandToBuffer(command: Command): Buffer {
       return createCommandLong(MAV_CMD.DO_SET_MODE, 1, customMode, 0, 0, 0, 0, 0)
     }
 
+    case 'MOTOR_TEST': {
+      // MAV_CMD_DO_MOTOR_TEST (209)
+      //  param1: motor instance (1-based; 0 = ALL/sequential)
+      //  param2: throttle type   (0 = percent, 1 = PWM µs)
+      //  param3: throttle value
+      //  param4: duration (seconds)
+      //  param5: motor count (for sequential ALL)
+      //  param6: test order   (0 = default board order)
+      //  param7: reserved
+      const motor = command.params?.motor ?? 1
+      const throttleType = command.params?.throttleType ?? 'percent'
+      const throttle = command.params?.throttle ?? 0
+      const duration = command.params?.duration ?? 0
+      const motorCount = command.params?.motorCount ?? (motor === 0 ? 6 : 0)
+      const throttleTypeValue = throttleType === 'pwm' ? 1 : 0
+      return createCommandLong(
+        MAV_CMD.DO_MOTOR_TEST,
+        motor,
+        throttleTypeValue,
+        throttle,
+        duration,
+        motorCount,
+        0,
+        0
+      )
+    }
+
     default:
-      throw new Error(`Unknown command type: ${command.type}`)
+      throw new Error(`Unknown command type: ${command.type as string}`)
   }
 }
 
@@ -176,6 +209,14 @@ export function getCommandDescription(command: Command): string {
       return 'Hold position'
     case 'SET_MODE':
       return `Set mode to ${command.params?.mode || 'AUTO'}`
+    case 'MOTOR_TEST': {
+      const m = command.params?.motor ?? 1
+      const t = command.params?.throttle ?? 0
+      const d = command.params?.duration ?? 0
+      const unit = command.params?.throttleType === 'pwm' ? 'µs' : '%'
+      const target = m === 0 ? 'ALL' : `M${m}`
+      return `Motor test ${target} @ ${t}${unit} for ${d}s`
+    }
     default:
       return 'Unknown command'
   }

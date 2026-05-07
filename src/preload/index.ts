@@ -15,7 +15,9 @@ import type {
   ParamEntry,
   ParamProgress,
   LogEntry,
-  SerialPortInfo
+  SerialPortInfo,
+  MotorTestPayload,
+  MotorTestResult
 } from '../renderer/src/types'
 
 // Custom MAVLink API for renderer
@@ -31,6 +33,8 @@ const mavlinkAPI = {
   disconnect: (): Promise<void> => ipcRenderer.invoke('mavlink:disconnect'),
   sendCommand: (command: Command): Promise<CommandResult> =>
     ipcRenderer.invoke('mavlink:send-command', command),
+  motorTest: (payload: MotorTestPayload): Promise<MotorTestResult> =>
+    ipcRenderer.invoke('mavlink:motor-test', payload),
   requestParams: (): Promise<void> => ipcRenderer.invoke('mavlink:request-params'),
   setParam: (param: ParamEntry): Promise<void> => ipcRenderer.invoke('mavlink:set-param', param),
   getConnectionStatus: (): Promise<ConnectionStatus> =>
