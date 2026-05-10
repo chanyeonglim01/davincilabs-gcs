@@ -24,6 +24,9 @@ export interface Waypoint {
   alt: number
   acceptRadius: number
   loiterRadius: number
+  speed?: number      // m/s — undefined = drone default
+  heading?: number    // deg 0~360 — undefined = next-WP direction
+  holdTime?: number   // sec at WP — undefined = 0 (pass through)
 }
 
 interface MissionStore {

@@ -263,9 +263,12 @@ export class MavlinkParser extends EventEmitter {
       default:
         return true
     }
-    if (offSys < 0 || offSys >= packet.length) return true
-    const ts = packet.readUInt8(offSys)
-    const tc = packet.readUInt8(offComp)
+    // MAVLink v2 trims trailing zero bytes — anything past (10 + payload_len)
+    // is the CRC, NOT payload. Treat fields beyond the trimmed payload as 0.
+    if (offSys < 0) return true
+    const payloadEnd = 10 + (packet.length > 1 ? packet[1] : 0)
+    const ts = offSys < payloadEnd ? packet.readUInt8(offSys) : 0
+    const tc = offComp < payloadEnd ? packet.readUInt8(offComp) : 0
     if (ts === 0 && tc === 0) return true // broadcast
     if (ts === GCS_SYSID && (tc === GCS_COMPID || tc === 0)) return true
     return false

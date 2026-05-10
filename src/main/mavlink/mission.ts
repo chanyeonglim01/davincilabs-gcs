@@ -44,6 +44,9 @@ export interface MissionWaypoint {
   alt: number
   acceptRadius: number
   loiterRadius: number
+  speed?: number      // m/s — undefined → NaN (drone default)
+  heading?: number    // deg 0~360 — undefined → NaN (next-WP direction)
+  holdTime?: number   // sec at WP — undefined → 0
 }
 
 // ─── Internal item representation ─────────────────────────────────────────────
@@ -153,12 +156,12 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 84,
         autocontinue: 1,
-        param1: 0,
+        param1: wp.speed ?? NaN,
         param2: 0,
         param3: 0,
-        param4: NaN,
-        lat: wp.lat,
-        lon: wp.lon,
+        param4: wp.heading ?? NaN,
+        lat: 0, // 0 = use current drone position
+        lon: 0,
         alt: wp.alt
       }
     case 'MC_TAKEOFF':
@@ -167,12 +170,12 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 22,
         autocontinue: 1,
-        param1: 0,
+        param1: wp.speed ?? NaN,
         param2: 0,
         param3: 0,
-        param4: NaN,
-        lat: wp.lat,
-        lon: wp.lon,
+        param4: wp.heading ?? NaN,
+        lat: 0, // 0 = use current drone position
+        lon: 0,
         alt: wp.alt
       }
     case 'WAYPOINT':
@@ -180,10 +183,10 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 16,
         autocontinue: 1,
-        param1: 0,
-        param2: wp.acceptRadius,
-        param3: 0,
-        param4: NaN,
+        param1: wp.speed ?? NaN,
+        param2: wp.heading ?? NaN,
+        param3: wp.acceptRadius,
+        param4: wp.holdTime ?? 0,
         lat: wp.lat,
         lon: wp.lon,
         alt: wp.alt
@@ -232,10 +235,10 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 85,
         autocontinue: 1,
-        param1: 0,
+        param1: wp.speed ?? NaN,
         param2: 0,
         param3: 0,
-        param4: NaN,
+        param4: wp.heading ?? NaN,
         lat: wp.lat,
         lon: wp.lon,
         alt: wp.alt
@@ -246,10 +249,10 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 21,
         autocontinue: 1,
-        param1: 0,
+        param1: wp.speed ?? NaN,
         param2: 0,
         param3: 0,
-        param4: NaN,
+        param4: wp.heading ?? NaN,
         lat: wp.lat,
         lon: wp.lon,
         alt: 0

@@ -1560,6 +1560,121 @@ export function MissionView() {
                     </div>
                   )}
 
+                  {/* Mission params: speed / heading / hold (only on selected, hasAlt) */}
+                  {def.hasAlt && isSelected && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr 1fr',
+                        gap: '6px',
+                        marginBottom: '8px'
+                      }}
+                    >
+                      {[
+                        {
+                          k: 'speed' as const,
+                          label: 'SPEED',
+                          unit: 'm/s',
+                          step: 0.5,
+                          min: 0,
+                          max: 50,
+                          wrap: false
+                        },
+                        {
+                          k: 'heading' as const,
+                          label: 'HDG',
+                          unit: '°',
+                          step: 1,
+                          min: 0,
+                          max: 359,
+                          wrap: true
+                        },
+                        {
+                          k: 'holdTime' as const,
+                          label: 'HOLD',
+                          unit: 's',
+                          step: 1,
+                          min: 0,
+                          max: 600,
+                          wrap: false
+                        }
+                      ].map((f) => (
+                        <div
+                          key={f.k}
+                          style={{
+                            background: 'rgba(0,0,0,0.20)',
+                            borderRadius: '4px',
+                            padding: '4px 6px',
+                            display: 'flex',
+                            flexDirection: 'column'
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: sans,
+                              fontSize: '8px',
+                              color: 'rgba(236,223,204,0.4)',
+                              letterSpacing: '0.08em'
+                            }}
+                          >
+                            {f.label}
+                          </span>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'baseline',
+                              gap: '3px'
+                            }}
+                          >
+                            <input
+                              type="number"
+                              value={wp[f.k] ?? ''}
+                              placeholder="auto"
+                              min={f.min}
+                              max={f.max}
+                              step={f.step}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                const raw = e.target.value
+                                if (raw === '') {
+                                  updateWp(wp.uid, { [f.k]: undefined })
+                                  return
+                                }
+                                const v = Number(raw)
+                                const adjusted = f.wrap
+                                  ? ((v % (f.max + 1)) + (f.max + 1)) % (f.max + 1)
+                                  : Math.min(f.max, Math.max(f.min, v))
+                                updateWp(wp.uid, { [f.k]: adjusted })
+                              }}
+                              style={{
+                                flex: 1,
+                                width: 0,
+                                fontFamily: mono,
+                                fontSize: '12px',
+                                background: 'transparent',
+                                border: 'none',
+                                outline: 'none',
+                                color: '#ECDFCC',
+                                textAlign: 'right',
+                                padding: 0
+                              }}
+                            />
+                            <span
+                              style={{
+                                fontFamily: mono,
+                                fontSize: '9px',
+                                color: 'rgba(236,223,204,0.4)'
+                              }}
+                            >
+                              {f.unit}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* VTOL transition toggle */}
                   {!def.hasAlt &&
                     (wp.action === 'VTOL_TRANSITION_FW' || wp.action === 'VTOL_TRANSITION_MC') && (

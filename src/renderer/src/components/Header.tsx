@@ -54,10 +54,10 @@ const LINK_STYLES: Record<LinkState, LinkStyle> = {
   }
 }
 
-function linkLabel(state: LinkState, host: string, port: number): string {
+function linkLabel(state: LinkState): string {
   switch (state) {
     case 'LINKED':
-      return `LINKED ${host}:${port}`
+      return 'LINKED'
     case 'WAITING_HEARTBEAT':
       return 'WAITING'
     case 'STALE':
@@ -85,7 +85,7 @@ export function Header({ currentView, onViewChange }: HeaderProps): React.JSX.El
 
   const [mode, setMode] = useState<ConnMode>('udp')
   const [udpHost, setUdpHost] = useState('127.0.0.1')
-  const [udpPort, setUdpPort] = useState('14551')
+  const [udpPort, setUdpPort] = useState('14550')
   const [comOpen, setComOpen] = useState(false)
   const [baudOpen, setBaudOpen] = useState(false)
   const [connecting, setConnecting] = useState(false)
@@ -183,10 +183,7 @@ export function Header({ currentView, onViewChange }: HeaderProps): React.JSX.El
   }
 
   const linkStyle = LINK_STYLES[linkState]
-  const labelText = useMemo(
-    () => linkLabel(linkState, connection.host, connection.port),
-    [linkState, connection.host, connection.port]
-  )
+  const labelText = useMemo(() => linkLabel(linkState), [linkState])
 
   const inputStyle: React.CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
@@ -420,7 +417,7 @@ export function Header({ currentView, onViewChange }: HeaderProps): React.JSX.El
               type="text"
               value={udpPort}
               onChange={(e) => setUdpPort(e.target.value)}
-              placeholder="14551"
+              placeholder="14550"
               style={{ ...inputStyle, width: '54px' }}
             />
           </div>

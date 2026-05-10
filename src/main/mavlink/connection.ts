@@ -131,6 +131,7 @@ export class MavlinkConnection extends EventEmitter {
       mode: prevConfig?.mode ?? 'simulink',
       host,
       port,
+      remotePort: prevConfig?.remotePort ?? 14551,
       sysid: prevConfig?.sysid ?? 1,
       compid: prevConfig?.compid ?? 1
     }

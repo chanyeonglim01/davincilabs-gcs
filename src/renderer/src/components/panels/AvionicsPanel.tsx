@@ -40,7 +40,8 @@ export function AvionicsPanel() {
 
   const roll = ((telemetry?.attitude?.roll ?? 0) * 180) / Math.PI
   const pitch = ((telemetry?.attitude?.pitch ?? 0) * 180) / Math.PI
-  const yaw = ((telemetry?.attitude?.yaw ?? 0) * 180) / Math.PI
+  const yawSigned = ((telemetry?.attitude?.yaw ?? 0) * 180) / Math.PI
+  const yaw = ((yawSigned % 360) + 360) % 360
 
   return (
     <div
