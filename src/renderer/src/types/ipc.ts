@@ -62,6 +62,7 @@ export type CommandType =
   | 'HOLD'
   | 'SET_MODE'
   | 'MOTOR_TEST'
+  | 'MISSION_START'
 
 export interface Command {
   type: CommandType
@@ -78,6 +79,9 @@ export type MotorTestThrottleType = 'percent' | 'pwm'
 export interface CommandParams {
   altitude?: number // meters, for TAKEOFF
   mode?: string // flight mode name, for SET_MODE
+  // ── MISSION_START ───────────────────────────────────────────────────────────
+  firstItem?: number // first mission item seq (0 = beginning)
+  lastItem?: number // last mission item seq (0 = end)
   // ── MOTOR_TEST ──────────────────────────────────────────────────────────────
   motor?: number // 1-based motor instance, 0 = ALL (sequential)
   throttle?: number // value (units depend on throttleType)

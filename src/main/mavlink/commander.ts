@@ -158,6 +158,15 @@ export function commandToBuffer(command: Command): Buffer {
       return createCommandLong(MAV_CMD.DO_SET_MODE, 1, customMode, 0, 0, 0, 0, 0)
     }
 
+    case 'MISSION_START': {
+      // MAV_CMD_MISSION_START (300)
+      //  param1: first_item (0 = use mission start from beginning)
+      //  param2: last_item  (0 = use mission end)
+      const firstItem = command.params?.firstItem ?? 0
+      const lastItem = command.params?.lastItem ?? 0
+      return createCommandLong(MAV_CMD.MISSION_START, firstItem, lastItem, 0, 0, 0, 0, 0)
+    }
+
     case 'MOTOR_TEST': {
       // MAV_CMD_DO_MOTOR_TEST (209)
       //  param1: motor instance (1-based; 0 = ALL/sequential)
@@ -209,6 +218,11 @@ export function getCommandDescription(command: Command): string {
       return 'Hold position'
     case 'SET_MODE':
       return `Set mode to ${command.params?.mode || 'AUTO'}`
+    case 'MISSION_START': {
+      const first = command.params?.firstItem ?? 0
+      const last = command.params?.lastItem ?? 0
+      return `Mission start (items ${first}..${last === 0 ? 'end' : last})`
+    }
     case 'MOTOR_TEST': {
       const m = command.params?.motor ?? 1
       const t = command.params?.throttle ?? 0

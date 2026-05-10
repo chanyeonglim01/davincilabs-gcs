@@ -1,5 +1,7 @@
+import * as React from 'react'
 import { useState } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { useMissionStore } from '@renderer/store/missionStore'
 import { HorizonIndicator } from './HorizonIndicator'
 import type { Command } from '@renderer/types'
 
@@ -12,12 +14,47 @@ const COMMANDS: { type: Command['type']; label: string; params?: Command['params
   { type: 'RTL', label: 'RTL' }
 ]
 
+// Mode entry — ArduPilot 스타일로 "모드 진입"과 "임무 실행"을 분리한다.
+// AUTO 진입은 IDLE 진입이므로 무확인. MANUAL/EMERGENCY는 사용자 경고 후 진입.
+type ModeKey = 'MANUAL' | 'AUTO' | 'EMER'
+
+interface ModeEntry {
+  key: ModeKey
+  /** SET_MODE 명령에 들어갈 mode name (customModes.MODE_NAME_TO_CUSTOM key) */
+  modeName: string
+  /** flightModeRaw 매칭용 (0=Manual, 1=Auto, 2=Emergency) */
+  flightModeRaw: number
+  /** confirm 메시지. null이면 무확인 즉시 송신 */
+  confirmMessage: string | null
+}
+
+const MODE_ENTRIES: ModeEntry[] = [
+  {
+    key: 'MANUAL',
+    modeName: 'MANUAL',
+    flightModeRaw: 0,
+    confirmMessage: 'Switch to MANUAL? RC required.'
+  },
+  // AUTO 진입은 IDLE/HOLD로 들어가는 것이므로 안전 → 무확인
+  { key: 'AUTO', modeName: 'AUTO', flightModeRaw: 1, confirmMessage: null },
+  {
+    key: 'EMER',
+    modeName: 'EMERGENCY',
+    flightModeRaw: 2,
+    confirmMessage: 'Emergency mode? Auto RTL/Land will engage.'
+  }
+]
+
+const ACCENT = '#A5D6A7'
+
 // Fixed panel - no drag
-export function AvionicsPanel() {
+export function AvionicsPanel(): React.JSX.Element {
   const [confirming, setConfirming] = useState<(typeof COMMANDS)[0] | null>(null)
   const [loading, setLoading] = useState(false)
+  const [missionConfirmOpen, setMissionConfirmOpen] = useState(false)
+  const [missionLoading, setMissionLoading] = useState(false)
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (): Promise<void> => {
     if (!confirming || !window.mavlink) {
       setConfirming(null)
       return
@@ -32,16 +69,67 @@ export function AvionicsPanel() {
       setConfirming(null)
     }
   }
-  const { telemetry } = useTelemetryStore()
+
+  const { telemetry, connection } = useTelemetryStore()
+  const waypoints = useMissionStore((s) => s.waypoints)
 
   const armed = telemetry?.status?.armed ?? false
   const flightMode = telemetry?.status?.flightMode ?? 'UNKNOWN'
+  const flightModeRaw = telemetry?.status?.flightModeRaw ?? -1
+  const subState = telemetry?.status?.subState ?? 0
+  const rcOverride = telemetry?.status?.rcOverride ?? false
   const systemStatus = telemetry?.status?.systemStatus ?? '--'
+  const linkState = connection?.linkState ?? 'DISCONNECTED'
 
   const roll = ((telemetry?.attitude?.roll ?? 0) * 180) / Math.PI
   const pitch = ((telemetry?.attitude?.pitch ?? 0) * 180) / Math.PI
   const yawSigned = ((telemetry?.attitude?.yaw ?? 0) * 180) / Math.PI
   const yaw = ((yawSigned % 360) + 360) % 360
+
+  // Mode 진입 핸들러 — ArduPilot 스타일 분리
+  const handleModeClick = (entry: ModeEntry): void => {
+    if (!window.mavlink) return
+    if (entry.confirmMessage && !window.confirm(entry.confirmMessage)) return
+    void window.mavlink.sendCommand({ type: 'SET_MODE', params: { mode: entry.modeName } })
+  }
+
+  // MISSION START 버튼 활성화 조건 — ArduPilot 스타일 게이팅
+  const missionStartEnabled =
+    linkState === 'LINKED' &&
+    armed &&
+    flightModeRaw === 1 && // Auto
+    subState === 0 && // IDLE
+    waypoints.length >= 1 &&
+    !rcOverride &&
+    !missionLoading
+
+  const handleMissionStartClick = (): void => {
+    if (!missionStartEnabled) return
+    setMissionConfirmOpen(true)
+  }
+
+  const handleMissionStartConfirm = async (): Promise<void> => {
+    if (!window.mavlink) {
+      setMissionConfirmOpen(false)
+      return
+    }
+    setMissionLoading(true)
+    try {
+      await window.mavlink.sendCommand({
+        type: 'MISSION_START',
+        params: { firstItem: 0, lastItem: 0 }
+      })
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setMissionLoading(false)
+      setMissionConfirmOpen(false)
+    }
+  }
+
+  const firstWp = waypoints[0]
+  const startAlt = firstWp?.alt ?? 0
+  const firstActionLabel = firstWp?.action ?? '—'
 
   return (
     <div
@@ -110,6 +198,40 @@ export function AvionicsPanel() {
         </div>
       </div>
 
+      {/* RC OVERRIDE Badge — bit 24 set */}
+      {rcOverride && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            padding: '5px 8px',
+            marginBottom: '10px',
+            background: 'rgba(236, 223, 204, 0.08)',
+            border: `1px solid ${ACCENT}`,
+            borderRadius: '3px',
+            color: ACCENT,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase'
+          }}
+        >
+          <div
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: ACCENT,
+              boxShadow: `0 0 8px ${ACCENT}`
+            }}
+          />
+          RC OVERRIDE
+        </div>
+      )}
+
       {/* Flight Mode */}
       <div
         style={{
@@ -154,24 +276,26 @@ export function AvionicsPanel() {
         </div>
         {/* Mode selector buttons */}
         <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
-          {(['MANUAL', 'AUTO', 'EMER'] as const).map((mode) => {
-            const modeMap: Record<string, string> = {
-              MANUAL: 'MANUAL',
-              AUTO: 'AUTO.MISSION',
-              EMER: 'EMERGENCY'
-            }
-            const activePrefix: Record<string, string> = {
-              MANUAL: 'MANUAL',
-              AUTO: 'AUTO',
-              EMER: 'EMERGENCY'
-            }
-            const isActive = flightMode.startsWith(activePrefix[mode])
+          {MODE_ENTRIES.map((entry) => {
+            const isActive = flightModeRaw === entry.flightModeRaw
+            // RC override 중에는 AUTO/EMER 진입 차단 (수동 복귀는 허용)
+            const blockedByRcOverride = rcOverride && entry.key !== 'MANUAL'
+            const disabled = isActive || blockedByRcOverride
             return (
               <button
-                key={mode}
+                key={entry.key}
                 onClick={() => {
-                  window.mavlink?.sendCommand({ type: 'SET_MODE', params: { mode: modeMap[mode] } })
+                  if (disabled) return
+                  handleModeClick(entry)
                 }}
+                disabled={disabled}
+                title={
+                  isActive
+                    ? `Already in ${entry.key}`
+                    : blockedByRcOverride
+                      ? 'RC override active — release sticks first'
+                      : (entry.confirmMessage ?? `Enter ${entry.key}`)
+                }
                 style={{
                   flex: 1,
                   fontFamily: "'JetBrains Mono', monospace",
@@ -184,25 +308,30 @@ export function AvionicsPanel() {
                     : '1px solid rgba(236, 223, 204, 0.15)',
                   borderRadius: '3px',
                   background: isActive ? 'rgba(236, 223, 204, 0.12)' : 'rgba(60, 61, 55, 0.3)',
-                  color: isActive ? '#ECDFCC' : 'rgba(236, 223, 204, 0.5)',
-                  cursor: 'pointer',
+                  color: isActive
+                    ? '#ECDFCC'
+                    : blockedByRcOverride
+                      ? 'rgba(236, 223, 204, 0.25)'
+                      : 'rgba(236, 223, 204, 0.5)',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: blockedByRcOverride ? 0.6 : 1,
                   textTransform: 'uppercase',
                   transition: 'all 0.15s ease'
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive) {
+                  if (!disabled) {
                     ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(60,61,55,0.7)'
                     ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(236,223,204,0.85)'
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) {
+                  if (!disabled) {
                     ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(60,61,55,0.3)'
                     ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(236,223,204,0.5)'
                   }
                 }}
               >
-                {mode}
+                {entry.key}
               </button>
             )
           })}
@@ -330,9 +459,61 @@ export function AvionicsPanel() {
             </button>
           ))}
         </div>
+
+        {/* MISSION START — ArduPilot 스타일 분리: AUTO/IDLE + ARMED + 웨이포인트 보유 시에만 활성 */}
+        <button
+          onClick={handleMissionStartClick}
+          disabled={!missionStartEnabled}
+          title={
+            missionStartEnabled
+              ? `Start mission with ${waypoints.length} waypoint${waypoints.length === 1 ? '' : 's'}`
+              : !armed
+                ? 'Disarmed — ARM first'
+                : flightModeRaw !== 1
+                  ? 'Switch to AUTO first'
+                  : subState !== 0
+                    ? 'Mission already in progress'
+                    : waypoints.length === 0
+                      ? 'Upload at least one waypoint first'
+                      : rcOverride
+                        ? 'RC override active — release sticks first'
+                        : linkState !== 'LINKED'
+                          ? 'No telemetry link'
+                          : 'Mission unavailable'
+          }
+          style={{
+            width: '100%',
+            marginTop: '8px',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '12px',
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            padding: '10px 4px',
+            border: `1px solid ${missionStartEnabled ? ACCENT : 'rgba(236, 223, 204, 0.15)'}`,
+            borderRadius: '3px',
+            background: missionStartEnabled ? 'rgba(165, 214, 167, 0.12)' : 'rgba(60, 61, 55, 0.3)',
+            color: missionStartEnabled ? ACCENT : 'rgba(236, 223, 204, 0.3)',
+            cursor: missionStartEnabled ? 'pointer' : 'not-allowed',
+            textTransform: 'uppercase',
+            transition: 'all 0.15s ease',
+            opacity: missionStartEnabled ? 1 : 0.7
+          }}
+          onMouseEnter={(e) => {
+            if (missionStartEnabled) {
+              ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(165, 214, 167, 0.22)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (missionStartEnabled) {
+              ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(165, 214, 167, 0.12)'
+            }
+          }}
+        >
+          ▶ MISSION START
+        </button>
       </div>
 
-      {/* Confirm dialog */}
+      {/* Confirm dialog (ARM/DISARM/TAKEOFF/LAND/HOLD/RTL) */}
       {confirming && (
         <div
           style={{
@@ -419,6 +600,112 @@ export function AvionicsPanel() {
                 }}
               >
                 {loading ? '...' : 'EXECUTE'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MISSION START confirm dialog */}
+      {missionConfirmOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(24,28,20,0.7)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 100
+          }}
+          onClick={() => !missionLoading && setMissionConfirmOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1e2218',
+              border: `1px solid ${ACCENT}`,
+              borderRadius: '6px',
+              padding: '14px 18px',
+              width: '240px',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.6)'
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: '9px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: ACCENT,
+                marginBottom: '8px'
+              }}
+            >
+              START MISSION?
+            </div>
+            <div
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '11px',
+                lineHeight: 1.6,
+                color: 'rgba(236, 223, 204, 0.85)',
+                marginBottom: '12px'
+              }}
+            >
+              <div>
+                Items: <span style={{ color: '#ECDFCC', fontWeight: 700 }}>{waypoints.length}</span>
+              </div>
+              <div>
+                First: <span style={{ color: '#ECDFCC', fontWeight: 700 }}>{firstActionLabel}</span>
+              </div>
+              <div>
+                Start altitude:{' '}
+                <span style={{ color: '#ECDFCC', fontWeight: 700 }}>{startAlt.toFixed(1)}m</span>
+              </div>
+              <div style={{ marginTop: '6px', color: ACCENT, fontSize: '10px' }}>
+                Status: ARMED · AUTO · LINKED
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setMissionConfirmOpen(false)}
+                disabled={missionLoading}
+                style={{
+                  flex: 1,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  padding: '8px',
+                  border: '1px solid rgba(236,223,204,0.15)',
+                  borderRadius: '3px',
+                  background: 'transparent',
+                  color: 'rgba(236,223,204,0.5)',
+                  cursor: missionLoading ? 'not-allowed' : 'pointer',
+                  textTransform: 'uppercase'
+                }}
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleMissionStartConfirm}
+                disabled={missionLoading}
+                style={{
+                  flex: 1,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  padding: '8px',
+                  border: `1px solid ${ACCENT}`,
+                  borderRadius: '3px',
+                  background: 'rgba(165, 214, 167, 0.18)',
+                  color: ACCENT,
+                  cursor: missionLoading ? 'not-allowed' : 'pointer',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {missionLoading ? '...' : '▶ START'}
               </button>
             </div>
           </div>

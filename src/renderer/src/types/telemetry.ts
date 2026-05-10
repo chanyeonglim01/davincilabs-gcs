@@ -38,6 +38,12 @@ export interface BatteryData {
 export interface StatusData {
   armed: boolean
   flightMode: string
+  /** Raw flight_mode enum from custom_mode bits [0..7] (0=Manual, 1=Auto, 2=Emergency). */
+  flightModeRaw?: number
+  /** Auto sub-state from custom_mode bits [16..23] (0=IDLE, 1=TAKEOFF, 2=MISSION, 3=LAND, 4=RTL, 5=HOLD). */
+  subState?: number
+  /** RC override active (custom_mode bit 24). True = RC stick is overriding GCS commands. */
+  rcOverride?: boolean
   systemStatus: string
   battery: BatteryData
   cpuLoad: number // % (0..100)

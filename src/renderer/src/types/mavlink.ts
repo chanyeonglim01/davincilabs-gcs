@@ -146,7 +146,8 @@ export const MAV_CMD = {
   NAV_LAND: 21,
   NAV_RETURN_TO_LAUNCH: 20,
   DO_SET_MODE: 176,
-  DO_MOTOR_TEST: 209
+  DO_MOTOR_TEST: 209,
+  MISSION_START: 300
 } as const
 
 // Union type of all known message payloads

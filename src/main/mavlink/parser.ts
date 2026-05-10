@@ -127,6 +127,9 @@ export class MavlinkParser extends EventEmitter {
       status: {
         armed: false,
         flightMode: 'UNKNOWN',
+        flightModeRaw: 0,
+        subState: 0,
+        rcOverride: false,
         systemStatus: 'UNKNOWN',
         battery: { voltage: 0, current: 0, remaining: -1 },
         cpuLoad: 0
@@ -344,13 +347,17 @@ export class MavlinkParser extends EventEmitter {
     const armed = (base_mode & MAV_MODE_FLAG.SAFETY_ARMED) !== 0
     const statusStr = this.getSystemStatusString(system_status)
     // UAM custom_mode bit layout (see customModes.ts §1.5):
-    // [0..7] flight_mode, [8..15] flight_state, [16..23] sub_state
-    const flightMode = formatModeLabel(decodeCustomMode(custom_mode))
+    // [0..7] flight_mode, [8..15] flight_state, [16..23] sub_state, [24] rc_override
+    const decoded = decodeCustomMode(custom_mode)
+    const flightMode = formatModeLabel(decoded, true)
 
     if (this.telemetryState.status) {
       this.telemetryState.status.armed = armed
       this.telemetryState.status.systemStatus = statusStr
       this.telemetryState.status.flightMode = flightMode
+      this.telemetryState.status.flightModeRaw = decoded.flightMode
+      this.telemetryState.status.subState = decoded.subState
+      this.telemetryState.status.rcOverride = decoded.rcOverride
     }
 
     this.emit('heartbeat')
@@ -605,7 +612,9 @@ export class MavlinkParser extends EventEmitter {
       22: 'TAKEOFF',
       21: 'LAND',
       20: 'RTL',
-      176: 'SET_MODE'
+      176: 'SET_MODE',
+      300: 'MISSION_START',
+      209: 'MOTOR_TEST'
     }
     return cmdMap[cmd] || ('ARM' as CommandType)
   }

@@ -8,7 +8,8 @@
  *   bits  0..7  : flight_mode  (0=Manual, 1=Auto, 2=Emergency)
  *   bits  8..15 : flight_state (0=Hover, 1=Transition, 2=FixedWing, 3=BackTransition)
  *   bits 16..23 : sub_state    (Auto: 0=IDLE / 1=TAKEOFF / 2=MISSION / 3=LAND / 4=RTL / 5=HOLD)
- *   bits 24..31 : reserved (0)
+ *   bit  24     : rc_override_active (1=조종기 스틱이 GCS 명령을 오버라이드 중)
+ *   bits 25..31 : reserved (0)
  *
  * 시뮬링크 모델 측 enum 값은 ASCII '0'/'1'/'2' (= 48/49/50) 이지만
  * wire 포맷은 0-base 인덱스를 사용한다. 모델/시뮬링크 측에서 +48 변환.
@@ -40,6 +41,8 @@ export interface DecodedMode {
   flightMode: FlightMode
   flightState: FlightState
   subState: number
+  /** bit 24 — true if RC stick input is currently overriding GCS commands */
+  rcOverride: boolean
 }
 
 /**
@@ -49,7 +52,8 @@ export function decodeCustomMode(customMode: number): DecodedMode {
   return {
     flightMode: (customMode & 0xff) as FlightMode,
     flightState: ((customMode >> 8) & 0xff) as FlightState,
-    subState: (customMode >> 16) & 0xff
+    subState: (customMode >> 16) & 0xff,
+    rcOverride: ((customMode >>> 24) & 0x01) !== 0
   }
 }
 
@@ -59,45 +63,53 @@ export function decodeCustomMode(customMode: number): DecodedMode {
 export function encodeCustomMode(
   flightMode: FlightMode,
   flightState: FlightState = FlightState.Hover,
-  subState: number = 0
+  subState: number = 0,
+  rcOverride: boolean = false
 ): number {
-  return ((flightMode & 0xff) >>> 0) | ((flightState & 0xff) << 8) | ((subState & 0xff) << 16)
+  return (
+    ((flightMode & 0xff) >>> 0) |
+    ((flightState & 0xff) << 8) |
+    ((subState & 0xff) << 16) |
+    ((rcOverride ? 1 : 0) << 24)
+  )
 }
 
 /**
- * GCS 표시용 모드 라벨 — plan.md §1.5 표 기반
+ * GCS 표시용 모드 라벨 — plan.md §1.5 표 기반.
+ * `includeRcOverride`가 true이고 rcOverride 비트가 켜져 있으면 ` (RC OVERRIDE)` 접미사를 추가한다.
  */
-export function formatModeLabel(decoded: DecodedMode): string {
-  const { flightMode, flightState, subState } = decoded
+export function formatModeLabel(decoded: DecodedMode, includeRcOverride: boolean = false): string {
+  const { flightMode, flightState, subState, rcOverride } = decoded
+  const suffix = includeRcOverride && rcOverride ? ' (RC OVERRIDE)' : ''
 
   if (flightMode === FlightMode.Emergency) {
-    return 'EMERGENCY'
+    return `EMERGENCY${suffix}`
   }
 
   if (flightMode === FlightMode.Manual) {
-    if (flightState === FlightState.FixedWing) return 'MANUAL/FW'
-    if (flightState === FlightState.Transition) return 'MANUAL/TRANS'
-    if (flightState === FlightState.BackTransition) return 'MANUAL/BACK'
-    return 'MANUAL/HOVER'
+    if (flightState === FlightState.FixedWing) return `MANUAL/FW${suffix}`
+    if (flightState === FlightState.Transition) return `MANUAL/TRANS${suffix}`
+    if (flightState === FlightState.BackTransition) return `MANUAL/BACK${suffix}`
+    return `MANUAL/HOVER${suffix}`
   }
 
   // Auto
-  if (flightState === FlightState.Transition) return 'AUTO.TRANS'
-  if (flightState === FlightState.BackTransition) return 'AUTO.BACK_TRANS'
+  if (flightState === FlightState.Transition) return `AUTO.TRANS${suffix}`
+  if (flightState === FlightState.BackTransition) return `AUTO.BACK_TRANS${suffix}`
 
   switch (subState as AutoSubState) {
     case AutoSubState.TAKEOFF:
-      return 'AUTO.TAKEOFF'
+      return `AUTO.TAKEOFF${suffix}`
     case AutoSubState.MISSION:
-      return flightState === FlightState.FixedWing ? 'AUTO.MISSION' : 'AUTO.HOVER'
+      return `${flightState === FlightState.FixedWing ? 'AUTO.MISSION' : 'AUTO.HOVER'}${suffix}`
     case AutoSubState.LAND:
-      return 'AUTO.LAND'
+      return `AUTO.LAND${suffix}`
     case AutoSubState.RTL:
-      return 'AUTO.RTL'
+      return `AUTO.RTL${suffix}`
     case AutoSubState.HOLD:
-      return 'AUTO.HOLD'
+      return `AUTO.HOLD${suffix}`
     default:
-      return flightState === FlightState.FixedWing ? 'AUTO/FW' : 'AUTO/HOVER'
+      return `${flightState === FlightState.FixedWing ? 'AUTO/FW' : 'AUTO/HOVER'}${suffix}`
   }
 }
 
