@@ -5,8 +5,9 @@
  * mirrors the structural language of MissionView / ParameterView so the
  * navigation feels native.
  *
- * Active tab:
- *   - Motor Test  (DO_MOTOR_TEST / cmd 209)
+ * Active tabs:
+ *   - Motor Test    (DO_MOTOR_TEST / cmd 209)
+ *   - Surface Test  (CTRL_SURF_TEST / cmd 31010)
  *
  * Placeholder tabs that will be filled in later milestones:
  *   - Sensor Test
@@ -14,8 +15,9 @@
  */
 import { useState } from 'react'
 import { MotorTestPanel } from './MotorTestPanel'
+import { CtrlSurfaceTestPanel } from './CtrlSurfaceTestPanel'
 
-type TestTab = 'motor' | 'sensor' | 'calibration'
+type TestTab = 'motor' | 'ctrlsurf' | 'sensor' | 'calibration'
 
 interface TabDef {
   id: TestTab
@@ -26,6 +28,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: 'motor', label: 'Motor Test', short: 'MOTOR', enabled: true },
+  { id: 'ctrlsurf', label: 'Surface Test', short: 'SURFACE', enabled: true },
   { id: 'sensor', label: 'Sensor Test', short: 'SENSOR', enabled: false },
   { id: 'calibration', label: 'Calibration', short: 'CAL', enabled: false }
 ]
@@ -132,7 +135,8 @@ export function TestView(): React.JSX.Element {
         }}
       >
         {activeTab === 'motor' && <MotorTestPanel />}
-        {activeTab !== 'motor' && (
+        {activeTab === 'ctrlsurf' && <CtrlSurfaceTestPanel />}
+        {activeTab !== 'motor' && activeTab !== 'ctrlsurf' && (
           <PlaceholderPanel label={TABS.find((t) => t.id === activeTab)!.label} />
         )}
       </div>

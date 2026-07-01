@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Command } from '@renderer/types'
+import { ConfirmModal } from '@renderer/components/ui/ConfirmModal'
 
 interface CmdDef {
   type: Command['type']
@@ -118,98 +119,14 @@ export function CommandsPanel() {
         ))}
       </div>
 
-      {/* Confirm Dialog (inline) */}
-      {confirming && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(24, 28, 20, 0.7)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 100
-          }}
-          onClick={() => !loading && setConfirming(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: '#1e2218',
-              border: '1px solid rgba(236, 223, 204, 0.2)',
-              borderRadius: '6px',
-              padding: '20px 24px',
-              width: '260px',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.6)'
-            }}
-          >
-            <div
-              style={{
-                fontFamily: "'Space Grotesk', sans-serif",
-                fontSize: '9px',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.12em',
-                color: 'rgba(236, 223, 204, 0.45)',
-                marginBottom: '8px'
-              }}
-            >
-              CONFIRM
-            </div>
-            <div
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '20px',
-                fontWeight: 700,
-                color: '#ECDFCC',
-                marginBottom: '16px'
-              }}
-            >
-              {confirming.label}
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => setConfirming(null)}
-                style={{
-                  flex: 1,
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  padding: '9px',
-                  border: '1px solid rgba(236, 223, 204, 0.15)',
-                  borderRadius: '3px',
-                  background: 'transparent',
-                  color: 'rgba(236, 223, 204, 0.5)',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase'
-                }}
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={loading}
-                style={{
-                  flex: 1,
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  padding: '9px',
-                  border: '1px solid rgba(236, 223, 204, 0.5)',
-                  borderRadius: '3px',
-                  background: 'rgba(236, 223, 204, 0.08)',
-                  color: '#ECDFCC',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  textTransform: 'uppercase'
-                }}
-              >
-                {loading ? '...' : 'EXECUTE'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirm Dialog (shared) */}
+      <ConfirmModal
+        open={confirming !== null}
+        label={confirming?.label ?? ''}
+        loading={loading}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   )
 }

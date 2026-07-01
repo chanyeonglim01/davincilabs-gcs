@@ -168,12 +168,13 @@ export function commandToBuffer(command: Command): Buffer {
     }
 
     case 'MOTOR_TEST': {
-      // MAV_CMD_DO_MOTOR_TEST (209)
-      //  param1: motor instance (1-based; 0 = ALL/sequential)
+      // MAV_CMD_DO_MOTOR_TEST (209) — custom ground-bench use
+      //  param1: motor BITMASK (bit i-1 = motor i; e.g. M1+M3+M5 = 0b010101 = 21).
+      //          0 = stop (no motors). Drives all masked motors simultaneously.
       //  param2: throttle type   (0 = percent, 1 = PWM µs)
       //  param3: throttle value
       //  param4: duration (seconds)
-      //  param5: motor count (for sequential ALL)
+      //  param5: motor count (legacy; unused with bitmask)
       //  param6: test order   (0 = default board order)
       //  param7: reserved
       const motor = command.params?.motor ?? 1
@@ -192,6 +193,24 @@ export function commandToBuffer(command: Command): Buffer {
         0,
         0
       )
+    }
+
+    case 'CTRL_SURF_TEST': {
+      // MAV_CMD CTRL_SURF_TEST (31010, custom)
+      //  param1: enable (1 = engage, 0 = release)
+      //  param2: source (0 = RC sticks, 1 = GCS values)
+      //  param3: dA aileron  (normalized -1..1)
+      //  param4: dE elevator (normalized -1..1)
+      //  param5: dR rudder   (normalized -1..1)
+      const enable = command.params?.enable ? 1 : 0
+      const source = command.params?.source === 'rc' ? 0 : 1
+      // Clamp deflections to the normalized [-1, 1] contract; reject NaN/Inf.
+      const norm = (v: number | undefined): number =>
+        Number.isFinite(v) ? Math.max(-1, Math.min(1, v as number)) : 0
+      const dA = norm(command.params?.dA)
+      const dE = norm(command.params?.dE)
+      const dR = norm(command.params?.dR)
+      return createCommandLong(MAV_CMD.CTRL_SURF_TEST, enable, source, dA, dE, dR, 0, 0)
     }
 
     default:
@@ -230,6 +249,14 @@ export function getCommandDescription(command: Command): string {
       const unit = command.params?.throttleType === 'pwm' ? 'µs' : '%'
       const target = m === 0 ? 'ALL' : `M${m}`
       return `Motor test ${target} @ ${t}${unit} for ${d}s`
+    }
+    case 'CTRL_SURF_TEST': {
+      if (!command.params?.enable) return 'Control surface test: release'
+      const src = command.params?.source === 'rc' ? 'RC' : 'GCS'
+      const dA = command.params?.dA ?? 0
+      const dE = command.params?.dE ?? 0
+      const dR = command.params?.dR ?? 0
+      return `Control surface test (${src}) dA=${dA} dE=${dE} dR=${dR}`
     }
     default:
       return 'Unknown command'

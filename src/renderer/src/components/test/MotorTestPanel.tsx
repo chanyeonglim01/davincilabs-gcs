@@ -1,94 +1,100 @@
 /**
  * MotorTestPanel
  *
- * Sends MAV_CMD_DO_MOTOR_TEST (cmd 209) for individual motors or sequential
- * ALL-motor sweeps. Multiple UI-level safety guards prevent accidental
- * spin-up on an armed vehicle or with props attached.
+ * Sends MAV_CMD_DO_MOTOR_TEST (cmd 209). param1 carries a motor bitmask (bit
+ * i-1 = motor i), so any set of motors spins simultaneously at the test PWM for
+ * the chosen duration, then an explicit stop is sent.
  *
- * Design system:
- *   colors  — #181C14 / #3C3D37 / #ECDFCC plus the link-state palette
- *             (#E06C75 danger, #F0C674 warning, #00FF88 safe)
- *   fonts   — JetBrains Mono (numbers/data) / Space Grotesk (labels/UI)
+ * Mission-Planner-minimal layout, strictly the three GCS tokens
+ * (#181C14 / #3C3D37 / #ECDFCC). State is shown through brightness and copy,
+ * never hue. Shares its chrome with CtrlSurfaceTestPanel via ./testUi.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { ConfirmModal } from '@renderer/components/ui/ConfirmModal'
+import { CREAM, panelShell, sectionLabel, pillStyle, primaryBtn, secondaryBtn } from './testStyles'
+import { TestHeader, StatusReadout } from './testUi'
 
 const MOTOR_COUNT = 6
-const DURATION_PRESETS = [0.5, 1, 2, 3, 5] as const
+const DURATION_PRESETS = [1, 2, 3, 5] as const
 const HIGH_THROTTLE_THRESHOLD = 70 // % — triggers extra confirm
 const LONG_DURATION_THRESHOLD = 3 // seconds — triggers extra confirm
-
-// Selection: numeric motor 1..6, or 'ALL' for sequential.
-type MotorSelection = number | 'ALL'
+const SEQ_GAP_MS = 150 // settle margin before the stop — absorbs IPC/UDP/FCS latency
 
 interface RunState {
-  selection: MotorSelection
+  motors: number[] // motors spinning together (1-based)
   throttle: number
   duration: number
   startedAt: number // ms epoch
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// helpers
-// ──────────────────────────────────────────────────────────────────────────────
-
-/**
- * Throttle color ramp:
- *   0..40   → cream (#ECDFCC)
- *   40..70  → amber (#F0C674)
- *   70..100 → red   (#E06C75)
- */
-function throttleColor(value: number): string {
-  if (value >= HIGH_THROTTLE_THRESHOLD) return '#E06C75'
-  if (value >= 40) return '#F0C674'
-  return '#ECDFCC'
+/** selected motors → DO_MOTOR_TEST bitmask (bit i-1 = motor i). */
+function motorMask(set: Set<number>): number {
+  let m = 0
+  for (const n of set) m |= 1 << (n - 1)
+  return m
 }
 
-function selectionLabel(s: MotorSelection): string {
-  return s === 'ALL' ? 'ALL' : `M${s}`
+function motorListLabel(motors: number[]): string {
+  if (motors.length === MOTOR_COUNT) return 'ALL'
+  return motors
+    .slice()
+    .sort((a, b) => a - b)
+    .map((n) => `M${n}`)
+    .join(',')
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// component
-// ──────────────────────────────────────────────────────────────────────────────
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 export function MotorTestPanel(): React.JSX.Element {
   const { telemetry, connection } = useTelemetryStore()
   const isArmed = telemetry?.status.armed ?? false
   const isLinked = connection.linkState === 'LINKED'
 
-  const [selection, setSelection] = useState<MotorSelection>(1)
+  const [selected, setSelected] = useState<Set<number>>(() => new Set([1]))
   const [throttle, setThrottle] = useState<number>(20)
   const [duration, setDuration] = useState<number>(1)
+  const [customDur, setCustomDur] = useState<string>('') // custom seconds (non-empty = custom mode)
   const [run, setRun] = useState<RunState | null>(null)
   const [now, setNow] = useState<number>(() => Date.now())
   const [statusText, setStatusText] = useState<string | null>(null)
-  const [statusKind, setStatusKind] = useState<'info' | 'warn' | 'error'>('info')
 
-  // 50ms ticker only while a test is running. The same effect also auto-clears
-  // run state when the duration elapses (the FCS is responsible for actually
-  // stopping the motor — we are merely tracking the local timer here).
+  const [confirm, setConfirm] = useState<{
+    message: string
+    onConfirm: () => void
+  } | null>(null)
+
+  // Abort flag for the sequential sweep (set by STOP).
+  const abortRef = useRef(false)
+
+  // 50ms ticker only while a test is running — advances the progress bar. The
+  // sequence runner (performTest) owns timing/clearing of `run`.
   useEffect(() => {
     if (!run) return
-    const id = window.setInterval(() => {
-      const t = Date.now()
-      setNow(t)
-      if ((t - run.startedAt) / 1000 >= run.duration) {
-        setRun(null)
-        setStatusKind('info')
-        setStatusText(`Test completed: ${selectionLabel(run.selection)} (${run.duration}s)`)
-      }
-    }, 50)
+    const id = window.setInterval(() => setNow(Date.now()), 50)
     return () => window.clearInterval(id)
   }, [run])
 
+  // Safety: if the panel unmounts (tab switch) mid-sweep, abort and send a
+  // best-effort stop so a motor never keeps spinning out of view.
+  useEffect(() => {
+    return () => {
+      abortRef.current = true
+      void window.mavlink?.motorTest?.({
+        motor: 0,
+        throttle: 0,
+        duration: 0,
+        throttleType: 'percent',
+        motorCount: MOTOR_COUNT
+      })
+    }
+  }, [])
+
   const inProgress = run !== null
 
-  // ── send helpers ────────────────────────────────────────────────────────────
   const sendMotorTest = useCallback(
     async (motor: number, t: number, d: number): Promise<boolean> => {
       if (!window.mavlink?.motorTest) {
-        setStatusKind('error')
         setStatusText('MAVLink bridge unavailable')
         return false
       }
@@ -101,13 +107,11 @@ export function MotorTestPanel(): React.JSX.Element {
           motorCount: motor === 0 ? MOTOR_COUNT : undefined
         })
         if (!result.success) {
-          setStatusKind('error')
           setStatusText(result.error ?? 'Motor test failed')
           return false
         }
         return true
       } catch (err) {
-        setStatusKind('error')
         setStatusText(err instanceof Error ? err.message : 'IPC error')
         return false
       }
@@ -116,505 +120,318 @@ export function MotorTestPanel(): React.JSX.Element {
   )
 
   const stopAll = useCallback(async () => {
-    // motor=0 sequential, throttle=0, duration=0 → effective stop
+    abortRef.current = true
     await sendMotorTest(0, 0, 0)
     setRun(null)
-    setStatusKind('warn')
-    setStatusText('STOP ALL sent')
+    setStatusText('STOP sent')
   }, [sendMotorTest])
 
-  const handleStart = useCallback(async () => {
-    if (isArmed || inProgress) return
+  // Spin all selected motors together: one DO_MOTOR_TEST carrying a bitmask of
+  // the chosen motors. The FCS drives every masked motor at the test PWM for
+  // `duration`, then we send an explicit stop.
+  const performTest = useCallback(async () => {
+    const motors = [...selected].sort((a, b) => a - b)
+    if (motors.length === 0) return
 
-    if (throttle >= HIGH_THROTTLE_THRESHOLD) {
-      const ok = window.confirm(
-        `High throttle (${throttle}%) — make absolutely sure props are removed.\n\nProceed?`
-      )
-      if (!ok) return
+    abortRef.current = false
+    const ok = await sendMotorTest(motorMask(selected), throttle, duration)
+    if (!ok) {
+      setRun(null)
+      return
     }
-    if (duration > LONG_DURATION_THRESHOLD) {
-      const ok = window.confirm(`Long duration (${duration}s). Proceed?`)
-      if (!ok) return
+    setRun({ motors, throttle, duration, startedAt: Date.now() })
+    setStatusText(null)
+    await sleep(duration * 1000 + SEQ_GAP_MS)
+    if (abortRef.current) return
+
+    await sendMotorTest(0, 0, 0)
+    setRun(null)
+    setStatusText(`Complete · ${motorListLabel(motors)}`)
+  }, [selected, throttle, duration, sendMotorTest])
+
+  const handleStart = useCallback(() => {
+    if (isArmed || inProgress || selected.size === 0) return
+
+    const warnings: string[] = []
+    if (throttle >= HIGH_THROTTLE_THRESHOLD)
+      warnings.push(`High throttle (${throttle}%) — make absolutely sure props are removed.`)
+    if (duration > LONG_DURATION_THRESHOLD) warnings.push(`Long duration (${duration}s).`)
+    if (selected.size > 1) warnings.push(`${selected.size} motors will spin simultaneously.`)
+
+    if (warnings.length === 0) {
+      void performTest()
+      return
     }
 
-    const motorParam = selection === 'ALL' ? 0 : selection
-    const ok = await sendMotorTest(motorParam, throttle, duration)
-    if (!ok) return
-
-    setRun({ selection, throttle, duration, startedAt: Date.now() })
-    setStatusKind('info')
-    setStatusText(`Running ${selectionLabel(selection)} @ ${throttle}% for ${duration}s`)
-  }, [isArmed, inProgress, throttle, duration, selection, sendMotorTest])
-
-  // Keyboard ←/→ on slider track
-  const sliderRef = useRef<HTMLInputElement>(null)
-  const sliderPercent = `${throttle}%`
-  const trackColor = useMemo(() => throttleColor(throttle), [throttle])
+    setConfirm({
+      message: `${warnings.join('\n')}\n\nProceed?`,
+      onConfirm: () => {
+        setConfirm(null)
+        void performTest()
+      }
+    })
+  }, [isArmed, inProgress, selected, throttle, duration, performTest])
 
   const elapsed = run ? Math.min((now - run.startedAt) / 1000, run.duration) : 0
   const progressPct = run && run.duration > 0 ? (elapsed / run.duration) * 100 : 0
+  const startDisabled = isArmed || inProgress || !isLinked || selected.size === 0
 
-  // ── styles ──────────────────────────────────────────────────────────────────
-  const sectionLabel: React.CSSProperties = {
-    fontFamily: "'Space Grotesk', sans-serif",
-    fontSize: '10px',
-    fontWeight: 700,
-    letterSpacing: '0.18em',
-    textTransform: 'uppercase',
-    color: 'rgba(236, 223, 204, 0.55)',
-    marginBottom: '10px'
-  }
-
-  const motorPill = (n: MotorSelection): React.CSSProperties => {
-    const active = selection === n
-    return {
-      fontFamily: "'JetBrains Mono', monospace",
-      fontSize: '12px',
-      fontWeight: 700,
-      letterSpacing: '0.04em',
-      padding: '8px 0',
-      minWidth: '52px',
-      textAlign: 'center',
-      borderRadius: '4px',
-      border: `1px solid ${active ? 'rgba(236,223,204,0.55)' : 'rgba(236,223,204,0.14)'}`,
-      background: active ? 'rgba(236,223,204,0.12)' : 'rgba(60,61,55,0.5)',
-      color: active ? '#ECDFCC' : 'rgba(236,223,204,0.5)',
-      cursor: inProgress ? 'not-allowed' : 'pointer',
-      transition: 'all 0.15s ease',
-      opacity: inProgress ? 0.45 : 1,
-      userSelect: 'none'
-    }
-  }
-
-  const durationPill = (d: number): React.CSSProperties => {
-    const active = duration === d
-    return {
-      fontFamily: "'JetBrains Mono', monospace",
-      fontSize: '11px',
-      fontWeight: 600,
-      padding: '6px 14px',
-      borderRadius: '3px',
-      border: `1px solid ${active ? 'rgba(236,223,204,0.55)' : 'rgba(236,223,204,0.14)'}`,
-      background: active ? 'rgba(236,223,204,0.1)' : 'transparent',
-      color: active ? '#ECDFCC' : 'rgba(236,223,204,0.45)',
-      cursor: inProgress ? 'not-allowed' : 'pointer',
-      transition: 'all 0.15s ease',
-      opacity: inProgress ? 0.45 : 1
-    }
-  }
-
-  // ── render ──────────────────────────────────────────────────────────────────
   return (
-    <div
-      style={{
-        background: 'rgba(60, 61, 55, 0.45)',
-        border: '1px solid rgba(236, 223, 204, 0.12)',
-        borderRadius: '8px',
-        padding: '24px',
-        boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
-        backdropFilter: 'blur(12px)',
-        maxWidth: '720px',
-        width: '100%',
-        color: '#ECDFCC'
-      }}
-    >
-      {/* Header strip */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          marginBottom: '20px',
-          paddingBottom: '14px',
-          borderBottom: '1px solid rgba(236,223,204,0.08)'
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '15px',
-              fontWeight: 700,
-              letterSpacing: '0.18em'
-            }}
-          >
-            MOTOR TEST
-          </div>
-          <div
-            style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontSize: '10px',
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: 'rgba(236,223,204,0.4)',
-              marginTop: '4px'
-            }}
-          >
-            MAV_CMD_DO_MOTOR_TEST · cmd 209
-          </div>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '11px'
-          }}
-        >
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              background: isArmed ? '#E06C75' : isLinked ? '#00FF88' : 'rgba(236,223,204,0.25)',
-              boxShadow: isArmed
-                ? '0 0 8px rgba(224,108,117,0.8)'
-                : isLinked
-                  ? '0 0 8px rgba(0,255,136,0.6)'
-                  : 'none'
-            }}
-          />
-          <span style={{ color: isArmed ? '#E06C75' : 'rgba(236,223,204,0.65)' }}>
-            {isArmed ? 'ARMED' : isLinked ? 'SAFE · DISARMED' : 'NO LINK'}
-          </span>
-        </div>
-      </div>
-
-      {/* Safety advisories */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
-        {isArmed && (
-          <SafetyBanner
-            tone="error"
-            text="Vehicle is ARMED — motor test disabled. Disarm before testing."
-          />
-        )}
-        <SafetyBanner
-          tone="warn"
-          text="Remove propellers before running motor tests. ESCs will spin the rotor at the requested throttle."
-        />
-      </div>
+    <div style={panelShell}>
+      <TestHeader
+        title="MOTOR TEST"
+        safety="Remove propellers and keep clear. Test only while disarmed."
+        armed={isArmed}
+        linked={isLinked}
+      />
 
       {/* Motor selection */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={sectionLabel}>Motor Selection</div>
+      <div style={{ marginBottom: '22px' }}>
+        <div style={sectionLabel}>Motor</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {Array.from({ length: MOTOR_COUNT }, (_, i) => i + 1).map((n) => (
             <div
               key={n}
-              onClick={() => !inProgress && setSelection(n)}
-              style={motorPill(n)}
+              onClick={() => {
+                if (inProgress) return
+                setSelected((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(n)) next.delete(n)
+                  else next.add(n)
+                  return next
+                })
+              }}
+              style={pillStyle(selected.has(n), inProgress)}
               role="button"
-              aria-pressed={selection === n}
+              aria-pressed={selected.has(n)}
             >
               M{n}
             </div>
           ))}
           <div
-            onClick={() => !inProgress && setSelection('ALL')}
-            style={{ ...motorPill('ALL'), minWidth: '90px' }}
+            onClick={() => {
+              if (inProgress) return
+              setSelected((prev) =>
+                prev.size === MOTOR_COUNT
+                  ? new Set()
+                  : new Set(Array.from({ length: MOTOR_COUNT }, (_, i) => i + 1))
+              )
+            }}
+            style={{ ...pillStyle(selected.size === MOTOR_COUNT, inProgress), minWidth: '64px' }}
             role="button"
-            aria-pressed={selection === 'ALL'}
+            aria-pressed={selected.size === MOTOR_COUNT}
           >
             ALL
           </div>
         </div>
-        <div
-          style={{
-            fontFamily: "'Space Grotesk', sans-serif",
-            fontSize: '10px',
-            letterSpacing: '0.12em',
-            color: 'rgba(236,223,204,0.35)',
-            marginTop: '8px',
-            textTransform: 'uppercase'
-          }}
-        >
-          {selection === 'ALL'
-            ? 'Sequential sweep · M1 → M6, each motor for the chosen duration'
-            : `Single motor · M${selection}`}
-        </div>
       </div>
 
-      {/* Throttle slider */}
-      <div style={{ marginBottom: '24px' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            justifyContent: 'space-between',
-            marginBottom: '10px'
-          }}
-        >
-          <div style={sectionLabel}>Throttle</div>
+      {/* Throttle + Duration row */}
+      <div style={{ display: 'flex', gap: '28px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 320px' }}>
           <div
             style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '24px',
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-              color: trackColor,
-              transition: 'color 0.15s ease'
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              marginBottom: '8px'
             }}
           >
-            {throttle}
-            <span style={{ fontSize: '14px', opacity: 0.6, marginLeft: '2px' }}>%</span>
+            <div style={sectionLabel}>Throttle</div>
+            <div
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '22px',
+                fontWeight: 700,
+                color: CREAM
+              }}
+            >
+              {throttle}
+              <span style={{ fontSize: '12px', opacity: 0.6, marginLeft: '2px' }}>%</span>
+            </div>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={throttle}
+            disabled={inProgress}
+            onChange={(e) => setThrottle(parseInt(e.target.value, 10))}
+            className="dl-test-slider"
+            style={
+              {
+                width: '100%',
+                cursor: inProgress ? 'not-allowed' : 'pointer',
+                opacity: inProgress ? 0.4 : 1,
+                ['--dl-fill-pct' as string]: `${throttle}%`
+              } as React.CSSProperties
+            }
+            aria-label="Throttle percent"
+          />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '9px',
+              color: 'rgba(236,223,204,0.3)',
+              marginTop: '6px'
+            }}
+          >
+            <span>0</span>
+            <span>25</span>
+            <span>50</span>
+            <span>70</span>
+            <span>100</span>
           </div>
         </div>
 
-        <input
-          ref={sliderRef}
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={throttle}
-          disabled={inProgress}
-          onChange={(e) => setThrottle(parseInt(e.target.value, 10))}
-          className="dl-throttle-slider"
-          style={
-            {
-              width: '100%',
-              cursor: inProgress ? 'not-allowed' : 'pointer',
-              opacity: inProgress ? 0.4 : 1,
-              ['--dl-thumb-color' as string]: trackColor,
-              ['--dl-fill-pct' as string]: sliderPercent
-            } as React.CSSProperties
-          }
-          aria-label="Throttle percent"
-        />
-
-        {/* Tick marks */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '9px',
-            color: 'rgba(236,223,204,0.3)',
-            marginTop: '6px',
-            letterSpacing: '0.04em'
-          }}
-        >
-          <span>0</span>
-          <span>25</span>
-          <span style={{ color: '#F0C674' }}>50</span>
-          <span style={{ color: '#F0C674' }}>70</span>
-          <span style={{ color: '#E06C75' }}>100</span>
+        <div style={{ flex: '0 0 auto' }}>
+          <div style={sectionLabel}>Duration</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+            {DURATION_PRESETS.map((d) => (
+              <div
+                key={d}
+                onClick={() => {
+                  if (inProgress) return
+                  setDuration(d)
+                  setCustomDur('')
+                }}
+                style={{
+                  ...pillStyle(customDur === '' && duration === d, inProgress),
+                  minWidth: '44px'
+                }}
+                role="button"
+                aria-pressed={customDur === '' && duration === d}
+              >
+                {d}s
+              </div>
+            ))}
+            <input
+              type="text"
+              inputMode="decimal"
+              value={customDur}
+              placeholder="sec"
+              disabled={inProgress}
+              onChange={(e) => {
+                const txt = e.target.value
+                setCustomDur(txt)
+                const n = parseFloat(txt)
+                if (Number.isFinite(n) && n > 0) setDuration(n)
+              }}
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '12px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                padding: '8px 10px',
+                width: '60px',
+                textAlign: 'center',
+                borderRadius: '4px',
+                border: `1px solid ${customDur !== '' ? 'rgba(236,223,204,0.55)' : 'rgba(236,223,204,0.14)'}`,
+                background: customDur !== '' ? 'rgba(236,223,204,0.12)' : 'rgba(60,61,55,0.5)',
+                color: CREAM,
+                outline: 'none',
+                cursor: inProgress ? 'not-allowed' : 'text',
+                opacity: inProgress ? 0.45 : 1
+              }}
+              aria-label="Custom duration seconds"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Duration */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={sectionLabel}>Duration</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {DURATION_PRESETS.map((d) => (
-            <div
-              key={d}
-              onClick={() => !inProgress && setDuration(d)}
-              style={durationPill(d)}
-              role="button"
-              aria-pressed={duration === d}
-            >
-              {d}s
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '18px' }}>
         <button
           onClick={handleStart}
-          disabled={isArmed || inProgress || !isLinked}
-          style={{
-            flex: 1,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '12px',
-            fontWeight: 700,
-            letterSpacing: '0.14em',
-            padding: '12px 18px',
-            borderRadius: '4px',
-            textTransform: 'uppercase',
-            border: '1px solid',
-            transition: 'all 0.15s ease',
-            cursor: isArmed || inProgress || !isLinked ? 'not-allowed' : 'pointer',
-            opacity: isArmed || inProgress || !isLinked ? 0.4 : 1,
-            borderColor: '#00FF88',
-            background: 'rgba(0, 255, 136, 0.08)',
-            color: '#00FF88'
-          }}
+          disabled={startDisabled}
+          style={primaryBtn(startDisabled)}
           title={
             isArmed
               ? 'Disarm vehicle first'
               : !isLinked
                 ? 'No telemetry link'
-                : inProgress
-                  ? 'Test in progress'
+                : selected.size === 0
+                  ? 'Select at least one motor'
                   : 'Start motor test'
           }
         >
-          ▶ START TEST
+          ▶ Start
         </button>
-        <button
-          onClick={() => void stopAll()}
-          style={{
-            flex: 1,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '12px',
-            fontWeight: 700,
-            letterSpacing: '0.14em',
-            padding: '12px 18px',
-            borderRadius: '4px',
-            textTransform: 'uppercase',
-            border: '1px solid #E06C75',
-            background: 'rgba(224, 108, 117, 0.12)',
-            color: '#E06C75',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          ■ STOP ALL
+        <button onClick={() => void stopAll()} style={secondaryBtn}>
+          ■ Stop
         </button>
       </div>
 
-      {/* Status / progress */}
-      <div
-        style={{
-          background: 'rgba(24, 28, 20, 0.6)',
-          border: '1px solid rgba(236,223,204,0.08)',
-          borderRadius: '4px',
-          padding: '14px 16px',
-          minHeight: '70px'
-        }}
-      >
-        <div style={sectionLabel}>Status</div>
-        {run ? (
-          <>
-            <div
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '12px',
-                color: '#ECDFCC',
-                marginBottom: '8px'
-              }}
-            >
-              {selectionLabel(run.selection)} spinning at {run.throttle}% — {elapsed.toFixed(1)} /{' '}
-              {run.duration.toFixed(1)} s
-            </div>
-            <div
-              style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(236,223,204,0.08)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}
-            >
-              <div
-                style={{
-                  width: `${progressPct}%`,
-                  height: '100%',
-                  background: throttleColor(run.throttle),
-                  transition: 'width 0.05s linear'
-                }}
-              />
-            </div>
-          </>
-        ) : (
-          <div
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '12px',
-              color:
-                statusKind === 'error'
-                  ? '#E06C75'
-                  : statusKind === 'warn'
-                    ? '#F0C674'
-                    : 'rgba(236,223,204,0.65)'
-            }}
-          >
-            {statusText ?? 'Idle — configure motor / throttle / duration, then START TEST.'}
-          </div>
-        )}
-      </div>
+      {/* Status — instrument readout */}
+      <StatusReadout
+        cells={[
+          { label: 'State', value: run ? 'RUNNING' : 'IDLE' },
+          { label: 'Motor', value: run ? motorListLabel(run.motors) : '—' },
+          { label: 'Throttle', value: `${run ? run.throttle : throttle}%` },
+          {
+            label: 'Time',
+            value: run ? `${elapsed.toFixed(1)} / ${run.duration.toFixed(1)}s` : `${duration}s`
+          }
+        ]}
+        progress={run ? progressPct / 100 : throttle / 100}
+        note={!run ? (statusText ?? undefined) : undefined}
+      />
 
-      {/* Slider scoped CSS — keeps the design system tokens contained */}
+      {/* Slider scoped CSS — cream tokens only */}
       <style>{`
-        .dl-throttle-slider {
+        .dl-test-slider {
           -webkit-appearance: none;
           appearance: none;
           height: 6px;
           background: linear-gradient(
             90deg,
-            var(--dl-thumb-color) 0%,
-            var(--dl-thumb-color) var(--dl-fill-pct),
+            rgba(236, 223, 204, 0.55) 0%,
+            rgba(236, 223, 204, 0.55) var(--dl-fill-pct),
             rgba(236, 223, 204, 0.1) var(--dl-fill-pct),
             rgba(236, 223, 204, 0.1) 100%
           );
           border-radius: 3px;
           outline: none;
-          transition: background 0.15s ease;
         }
-        .dl-throttle-slider::-webkit-slider-thumb {
+        .dl-test-slider::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
           width: 16px;
           height: 16px;
           border-radius: 50%;
           background: #ECDFCC;
-          border: 2px solid var(--dl-thumb-color);
+          border: 2px solid rgba(60, 61, 55, 0.9);
           box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
           cursor: pointer;
           transition: transform 0.1s ease;
         }
-        .dl-throttle-slider::-webkit-slider-thumb:hover {
-          transform: scale(1.15);
-        }
-        .dl-throttle-slider::-moz-range-thumb {
+        .dl-test-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+        .dl-test-slider::-moz-range-thumb {
           width: 16px;
           height: 16px;
           border-radius: 50%;
           background: #ECDFCC;
-          border: 2px solid var(--dl-thumb-color);
+          border: 2px solid rgba(60, 61, 55, 0.9);
           cursor: pointer;
         }
-        .dl-throttle-slider:focus-visible {
+        .dl-test-slider:disabled::-webkit-slider-thumb { background: rgba(236,223,204,0.4); }
+        .dl-test-slider:focus-visible {
           outline: 1px solid rgba(236, 223, 204, 0.5);
           outline-offset: 4px;
         }
       `}</style>
-    </div>
-  )
-}
 
-// ──────────────────────────────────────────────────────────────────────────────
-// SafetyBanner — lightweight inline notice
-// ──────────────────────────────────────────────────────────────────────────────
-interface SafetyBannerProps {
-  tone: 'warn' | 'error'
-  text: string
-}
-
-function SafetyBanner({ tone, text }: SafetyBannerProps): React.JSX.Element {
-  const color = tone === 'error' ? '#E06C75' : '#F0C674'
-  const bg = tone === 'error' ? 'rgba(224, 108, 117, 0.08)' : 'rgba(240, 198, 116, 0.06)'
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '8px 12px',
-        background: bg,
-        border: `1px solid ${color}30`,
-        borderRadius: '3px',
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: '11px',
-        color
-      }}
-    >
-      <span style={{ fontSize: '13px', lineHeight: 1 }}>⚠</span>
-      <span style={{ letterSpacing: '0.02em' }}>{text}</span>
+      <ConfirmModal
+        open={confirm !== null}
+        label="MOTOR TEST"
+        message={confirm?.message ?? ''}
+        confirmText="PROCEED"
+        onConfirm={() => confirm?.onConfirm()}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   )
 }

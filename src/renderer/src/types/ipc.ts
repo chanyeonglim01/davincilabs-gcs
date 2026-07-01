@@ -62,7 +62,15 @@ export type CommandType =
   | 'HOLD'
   | 'SET_MODE'
   | 'MOTOR_TEST'
+  | 'CTRL_SURF_TEST'
   | 'MISSION_START'
+
+/**
+ * Control-surface test source.
+ * - 'gcs' drives surfaces from the dA/dE/dR values below (param2 = 1)
+ * - 'rc'  hands control to the RC sticks (param2 = 0)
+ */
+export type CtrlSurfSource = 'gcs' | 'rc'
 
 export interface Command {
   type: CommandType
@@ -83,11 +91,17 @@ export interface CommandParams {
   firstItem?: number // first mission item seq (0 = beginning)
   lastItem?: number // last mission item seq (0 = end)
   // ── MOTOR_TEST ──────────────────────────────────────────────────────────────
-  motor?: number // 1-based motor instance, 0 = ALL (sequential)
+  motor?: number // motor bitmask (bit i-1 = motor i); 0 = stop. Drives masked motors together.
   throttle?: number // value (units depend on throttleType)
   duration?: number // seconds the motor should spin
   throttleType?: MotorTestThrottleType // default 'percent'
   motorCount?: number // for ALL/sequential: number of motors to test (default 6)
+  // ── CTRL_SURF_TEST ────────────────────────────────────────────────────────────
+  enable?: boolean // true = engage test override, false = release
+  source?: CtrlSurfSource // 'gcs' (use dA/dE/dR) or 'rc' (sticks)
+  dA?: number // aileron deflection, normalized -1..1
+  dE?: number // elevator deflection, normalized -1..1
+  dR?: number // rudder deflection,  normalized -1..1
 }
 
 export interface CommandResult {
@@ -147,12 +161,27 @@ export interface MotorTestResult {
   error?: string
 }
 
+// Control-surface test IPC payload (mavlink:ctrl-surf-test)
+export interface CtrlSurfTestPayload {
+  enable: boolean
+  source: CtrlSurfSource
+  dA: number // normalized -1..1
+  dE: number
+  dR: number
+}
+
+export interface CtrlSurfTestResult {
+  success: boolean
+  error?: string
+}
+
 // Renderer -> Main (invoke via ipcRenderer.invoke)
 export interface RendererToMainChannels {
   'mavlink:connect': ConnectionConfig
   'mavlink:disconnect': void
   'mavlink:send-command': Command
   'mavlink:motor-test': MotorTestPayload
+  'mavlink:ctrl-surf-test': CtrlSurfTestPayload
   'mavlink:request-params': void
   'mavlink:set-param': ParamEntry
   'mavlink:get-connection-status': ConnectionStatus

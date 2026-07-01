@@ -147,7 +147,8 @@ export const MAV_CMD = {
   NAV_RETURN_TO_LAUNCH: 20,
   DO_SET_MODE: 176,
   DO_MOTOR_TEST: 209,
-  MISSION_START: 300
+  MISSION_START: 300,
+  CTRL_SURF_TEST: 31010 // custom: ground-bench control-surface test
 } as const
 
 // Union type of all known message payloads
