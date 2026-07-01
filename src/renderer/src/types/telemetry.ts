@@ -38,13 +38,23 @@ export interface BatteryData {
 export interface StatusData {
   armed: boolean
   flightMode: string
+  /** Two-line mode label: primary = MANUAL/AUTO/EMERGENCY. */
+  flightModePrimary?: string
+  /** Two-line mode label: sub-state (one word, e.g. TAKEOFF/HOVER). */
+  flightModeSub?: string
   /** Raw flight_mode enum from custom_mode bits [0..7] (0=Manual, 1=Auto, 2=Emergency). */
   flightModeRaw?: number
   /** Auto sub-state from custom_mode bits [16..23] (0=IDLE, 1=TAKEOFF, 2=MISSION, 3=LAND, 4=RTL, 5=HOLD). */
   subState?: number
   /** RC override active (custom_mode bit 24). True = RC stick is overriding GCS commands. */
   rcOverride?: boolean
+  /** RC link up (custom_mode bit 25). True = RC 값 수신 중 (connect). */
+  rcLink?: boolean
   systemStatus: string
+  /** GPS fix_type from GPS_RAW_INT (0/1=no fix, 2=2D, 3=3D, 4=DGPS, 5/6=RTK). */
+  gpsFix?: number
+  /** Satellites visible from GPS_RAW_INT. */
+  satellites?: number
   battery: BatteryData
   cpuLoad: number // % (0..100)
 }

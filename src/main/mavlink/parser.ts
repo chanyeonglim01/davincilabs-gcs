@@ -13,7 +13,7 @@ import type {
   CommandType
 } from '../../renderer/src/types'
 import { MAV_MODE_FLAG, MAV_STATE, MAV_RESULT } from '../../renderer/src/types'
-import { decodeCustomMode, formatModeLabel } from './customModes'
+import { decodeCustomMode, formatModeLabel, formatModeParts } from './customModes'
 
 /**
  * MAVLink v2 CRC_EXTRA table by msgid.
@@ -26,6 +26,7 @@ const CRC_EXTRA: Readonly<Record<number, number>> = {
   21: 159, // PARAM_REQUEST_LIST
   22: 220, // PARAM_VALUE
   23: 168, // PARAM_SET
+  24: 24, // GPS_RAW_INT
   30: 39, // ATTITUDE
   33: 104, // GLOBAL_POSITION_INT
   41: 28, // MISSION_SET_CURRENT
@@ -130,6 +131,7 @@ export class MavlinkParser extends EventEmitter {
         flightModeRaw: 0,
         subState: 0,
         rcOverride: false,
+        rcLink: false,
         systemStatus: 'UNKNOWN',
         battery: { voltage: 0, current: 0, remaining: -1 },
         cpuLoad: 0
@@ -235,6 +237,7 @@ export class MavlinkParser extends EventEmitter {
       case 0: // HEARTBEAT — no target
       case 30: // ATTITUDE — no target
       case 33: // GLOBAL_POSITION_INT — no target
+      case 24: // GPS_RAW_INT — no target
       case 74: // VFR_HUD — no target
       case 1: // SYS_STATUS — no target
       case 42: // MISSION_CURRENT — no target
@@ -304,6 +307,9 @@ export class MavlinkParser extends EventEmitter {
       case 33: // GLOBAL_POSITION_INT
         this.handleGlobalPositionInt(safe)
         break
+      case 24: // GPS_RAW_INT
+        this.handleGpsRawInt(safe)
+        break
       case 74: // VFR_HUD
         this.handleVfrHud(safe)
         break
@@ -332,7 +338,7 @@ export class MavlinkParser extends EventEmitter {
         this.handleMissionItemInt(safe)
         break
       default:
-      // console.log(`[MAVLink Parser] Unhandled msgid: ${msgid}`)
+      // unhandled msgid
     }
   }
 
@@ -347,17 +353,21 @@ export class MavlinkParser extends EventEmitter {
     const armed = (base_mode & MAV_MODE_FLAG.SAFETY_ARMED) !== 0
     const statusStr = this.getSystemStatusString(system_status)
     // UAM custom_mode bit layout (see customModes.ts §1.5):
-    // [0..7] flight_mode, [8..15] flight_state, [16..23] sub_state, [24] rc_override
+    // [0..7] flight_mode, [8..15] flight_state, [16..23] sub_state, [24] rc_override, [25] rc_link
     const decoded = decodeCustomMode(custom_mode)
     const flightMode = formatModeLabel(decoded, true)
+    const modeParts = formatModeParts(decoded)
 
     if (this.telemetryState.status) {
       this.telemetryState.status.armed = armed
       this.telemetryState.status.systemStatus = statusStr
       this.telemetryState.status.flightMode = flightMode
+      this.telemetryState.status.flightModePrimary = modeParts.primary
+      this.telemetryState.status.flightModeSub = modeParts.sub
       this.telemetryState.status.flightModeRaw = decoded.flightMode
       this.telemetryState.status.subState = decoded.subState
       this.telemetryState.status.rcOverride = decoded.rcOverride
+      this.telemetryState.status.rcLink = decoded.rcLink
     }
 
     this.emit('heartbeat')
@@ -462,6 +472,23 @@ export class MavlinkParser extends EventEmitter {
         remaining: battery_remaining
       }
       this.telemetryState.status.cpuLoad = load / 10
+    }
+
+    this.tryEmitTelemetry()
+  }
+
+  /**
+   * Handle GPS_RAW_INT (msgid 24) — real GPS fix_type + satellite count.
+   * payload: time_usec(8) lat(4) lon(4) alt(4) eph(2) epv(2) vel(2) cog(2)
+   *          fix_type(1)@28 satellites_visible(1)@29  → safe offsets 38/39.
+   */
+  private handleGpsRawInt(packet: Buffer): void {
+    const fix_type = packet.readUInt8(38)
+    const satellites_visible = packet.readUInt8(39)
+
+    if (this.telemetryState.status) {
+      this.telemetryState.status.gpsFix = fix_type
+      this.telemetryState.status.satellites = satellites_visible
     }
 
     this.tryEmitTelemetry()

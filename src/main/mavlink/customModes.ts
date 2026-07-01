@@ -9,7 +9,8 @@
  *   bits  8..15 : flight_state (0=Hover, 1=Transition, 2=FixedWing, 3=BackTransition)
  *   bits 16..23 : sub_state    (Auto: 0=IDLE / 1=TAKEOFF / 2=MISSION / 3=LAND / 4=RTL / 5=HOLD)
  *   bit  24     : rc_override_active (1=조종기 스틱이 GCS 명령을 오버라이드 중)
- *   bits 25..31 : reserved (0)
+ *   bit  25     : rc_link (1=RC 수신 중 — 값이 들어오면 connect)
+ *   bits 26..31 : reserved (0)
  *
  * 시뮬링크 모델 측 enum 값은 ASCII '0'/'1'/'2' (= 48/49/50) 이지만
  * wire 포맷은 0-base 인덱스를 사용한다. 모델/시뮬링크 측에서 +48 변환.
@@ -43,6 +44,8 @@ export interface DecodedMode {
   subState: number
   /** bit 24 — true if RC stick input is currently overriding GCS commands */
   rcOverride: boolean
+  /** bit 25 — true if RC link is up (RC 값 수신 중) */
+  rcLink: boolean
 }
 
 /**
@@ -53,7 +56,8 @@ export function decodeCustomMode(customMode: number): DecodedMode {
     flightMode: (customMode & 0xff) as FlightMode,
     flightState: ((customMode >> 8) & 0xff) as FlightState,
     subState: (customMode >> 16) & 0xff,
-    rcOverride: ((customMode >>> 24) & 0x01) !== 0
+    rcOverride: ((customMode >>> 24) & 0x01) !== 0,
+    rcLink: ((customMode >>> 25) & 0x01) !== 0
   }
 }
 
@@ -111,6 +115,60 @@ export function formatModeLabel(decoded: DecodedMode, includeRcOverride: boolean
     default:
       return `${flightState === FlightState.FixedWing ? 'AUTO/FW' : 'AUTO/HOVER'}${suffix}`
   }
+}
+
+/**
+ * 모드 → 2줄 표시용 {primary, sub}.
+ * primary = MANUAL / AUTO / EMERGENCY, sub = 세부 상태(한 단어). 슬래시·점 혼용 제거.
+ */
+export interface ModeParts {
+  primary: string
+  sub: string
+}
+
+export function formatModeParts(decoded: DecodedMode): ModeParts {
+  const { flightMode, flightState, subState, rcOverride } = decoded
+  const withRc = (sub: string): string => (rcOverride ? (sub ? `${sub} · RC` : 'RC') : sub)
+
+  if (flightMode === FlightMode.Emergency) {
+    return { primary: 'EMERGENCY', sub: withRc('') }
+  }
+
+  if (flightMode === FlightMode.Manual) {
+    let sub: string
+    if (flightState === FlightState.FixedWing) sub = 'FW'
+    else if (flightState === FlightState.Transition) sub = 'TRANS'
+    else if (flightState === FlightState.BackTransition) sub = 'BACK'
+    else sub = 'HOVER'
+    return { primary: 'MANUAL', sub: withRc(sub) }
+  }
+
+  // Auto
+  let sub: string
+  if (flightState === FlightState.Transition) sub = 'TRANS'
+  else if (flightState === FlightState.BackTransition) sub = 'BACK_TRANS'
+  else {
+    switch (subState as AutoSubState) {
+      case AutoSubState.TAKEOFF:
+        sub = 'TAKEOFF'
+        break
+      case AutoSubState.MISSION:
+        sub = flightState === FlightState.FixedWing ? 'MISSION' : 'HOVER'
+        break
+      case AutoSubState.LAND:
+        sub = 'LAND'
+        break
+      case AutoSubState.RTL:
+        sub = 'RTL'
+        break
+      case AutoSubState.HOLD:
+        sub = 'HOLD'
+        break
+      default:
+        sub = flightState === FlightState.FixedWing ? 'FW' : 'HOVER'
+    }
+  }
+  return { primary: 'AUTO', sub: withRc(sub) }
 }
 
 /**
