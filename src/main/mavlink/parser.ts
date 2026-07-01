@@ -14,6 +14,7 @@ import type {
 } from '../../renderer/src/types'
 import { MAV_MODE_FLAG, MAV_STATE, MAV_RESULT } from '../../renderer/src/types'
 import { decodeCustomMode, formatModeLabel, formatModeParts } from './customModes'
+import { decodeLihaiStatus, decodeKetiObstacle } from './customMessages'
 
 /**
  * MAVLink v2 CRC_EXTRA table by msgid.
@@ -40,7 +41,9 @@ const CRC_EXTRA: Readonly<Record<number, number>> = {
   73: 38, // MISSION_ITEM_INT
   74: 20, // VFR_HUD
   76: 152, // COMMAND_LONG
-  77: 143 // COMMAND_ACK
+  77: 143, // COMMAND_ACK
+  42001: 103, // LIHAI_STATUS (custom)
+  42002: 104 // KETI_OBSTACLE (custom)
 }
 
 const GCS_SYSID = 255
@@ -134,7 +137,17 @@ export class MavlinkParser extends EventEmitter {
         rcLink: false,
         systemStatus: 'UNKNOWN',
         battery: { voltage: 0, current: 0, remaining: -1 },
-        cpuLoad: 0
+        cpuLoad: 0,
+        lihaiLink: false,
+        lihaiErrors: { bat: 0, gps: 0, imu: 0, baro: 0, rc: 0, angle: 0, pos: 0 },
+        ketiValid: false,
+        ketiCount: 0,
+        ketiId: 0,
+        ketiDistance: 0,
+        ketiObjX: 0,
+        ketiObjY: 0,
+        ketiObjZ: 0,
+        ketiSize: 0
       },
       heading: 0,
       throttle: 0,
@@ -242,6 +255,8 @@ export class MavlinkParser extends EventEmitter {
       case 1: // SYS_STATUS — no target
       case 42: // MISSION_CURRENT — no target
       case 46: // MISSION_ITEM_REACHED — no target
+      case 42001: // LIHAI_STATUS (custom) — no target (broadcast)
+      case 42002: // KETI_OBSTACLE (custom) — no target (broadcast)
         return true
       case 47: {
         // MISSION_ACK: target_system(1) + target_component(1) + type(1)
@@ -336,6 +351,12 @@ export class MavlinkParser extends EventEmitter {
         break
       case 73: // MISSION_ITEM_INT (download response)
         this.handleMissionItemInt(safe)
+        break
+      case 42001: // LIHAI_STATUS (custom)
+        this.handleLihaiStatus(safe)
+        break
+      case 42002: // KETI_OBSTACLE (custom)
+        this.handleKetiObstacle(safe)
         break
       default:
       // unhandled msgid
@@ -489,6 +510,50 @@ export class MavlinkParser extends EventEmitter {
     if (this.telemetryState.status) {
       this.telemetryState.status.gpsFix = fix_type
       this.telemetryState.status.satellites = satellites_visible
+    }
+
+    this.tryEmitTelemetry()
+  }
+
+  /**
+   * Handle LIHAI_STATUS (msgid 42001) — LIHAI link + subsystem error flags.
+   * Wire contract SoT: customMessages.ts. Payload starts at safe byte 10.
+   */
+  private handleLihaiStatus(packet: Buffer): void {
+    const lihai = decodeLihaiStatus(packet.subarray(10))
+
+    if (this.telemetryState.status) {
+      this.telemetryState.status.lihaiLink = lihai.link
+      this.telemetryState.status.lihaiErrors = {
+        bat: lihai.batError,
+        gps: lihai.gpsError,
+        imu: lihai.imuError,
+        baro: lihai.barometerError,
+        rc: lihai.rcError,
+        angle: lihai.angleControlError,
+        pos: lihai.positionControlError
+      }
+    }
+
+    this.tryEmitTelemetry()
+  }
+
+  /**
+   * Handle KETI_OBSTACLE (msgid 42002) — forward obstacle detection.
+   * Wire contract SoT: customMessages.ts. Payload starts at safe byte 10.
+   */
+  private handleKetiObstacle(packet: Buffer): void {
+    const keti = decodeKetiObstacle(packet.subarray(10))
+
+    if (this.telemetryState.status) {
+      this.telemetryState.status.ketiValid = keti.valid
+      this.telemetryState.status.ketiCount = keti.count
+      this.telemetryState.status.ketiId = keti.id
+      this.telemetryState.status.ketiDistance = keti.distance
+      this.telemetryState.status.ketiObjX = keti.objX
+      this.telemetryState.status.ketiObjY = keti.objY
+      this.telemetryState.status.ketiObjZ = keti.objZ
+      this.telemetryState.status.ketiSize = keti.size
     }
 
     this.tryEmitTelemetry()

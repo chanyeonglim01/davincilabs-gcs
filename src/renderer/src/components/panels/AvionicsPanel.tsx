@@ -95,6 +95,20 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
   const satellites = telemetry?.status?.satellites ?? 0
   const gps3D = gpsFix >= 3
   const gpsLabel = gpsFix >= 3 ? `3D · ${satellites}` : gpsFix === 2 ? `2D · ${satellites}` : 'NO FIX'
+
+  // LIHAI — LIHAI_STATUS link + subsystem error flags
+  const lihaiLink = telemetry?.status?.lihaiLink ?? false
+  const lihaiErrors = telemetry?.status?.lihaiErrors
+  const lihaiHasError = lihaiErrors ? Object.values(lihaiErrors).some((v) => v !== 0) : false
+  const lihaiColor = !lihaiLink ? 'rgba(236, 223, 204, 0.2)' : lihaiHasError ? '#f5c842' : ACCENT
+  const lihaiLabel = !lihaiLink ? 'NO LINK' : lihaiHasError ? 'ERROR' : 'OK'
+
+  // KETI — KETI_OBSTACLE forward obstacle monitor
+  const ketiValid = telemetry?.status?.ketiValid ?? false
+  const ketiDistance = telemetry?.status?.ketiDistance ?? 0
+  const ketiObstacle = ketiValid && ketiDistance > 0
+  const ketiColor = !ketiValid ? 'rgba(236, 223, 204, 0.2)' : ketiObstacle ? '#f5c842' : ACCENT
+  const ketiLabel = !ketiValid ? 'NO LINK' : ketiObstacle ? `OBST ${ketiDistance.toFixed(1)}m` : 'CLEAR'
   const systemStatus = telemetry?.status?.systemStatus ?? '--'
   const linkState = connection?.linkState ?? 'DISCONNECTED'
 
@@ -361,6 +375,112 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
             }}
           >
             {gpsLabel}
+          </span>
+        </div>
+      </div>
+
+      {/* LIHAI indicator — LIHAI_STATUS link + subsystem error flags. GPS 줄과 동일 레이아웃. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '12px'
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: '9px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            color: 'rgba(236, 223, 204, 0.45)'
+          }}
+        >
+          LIHAI
+        </span>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <div
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: lihaiColor,
+              boxShadow: lihaiLink ? `0 0 8px ${lihaiColor}` : 'none',
+              transition: 'all 0.3s ease'
+            }}
+          />
+          <span
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '10px',
+              fontWeight: 700,
+              color: lihaiLink ? lihaiColor : 'rgba(236, 223, 204, 0.35)',
+              letterSpacing: '0.05em',
+              transition: 'color 0.3s ease'
+            }}
+          >
+            {lihaiLabel}
+          </span>
+        </div>
+      </div>
+
+      {/* KETI indicator — KETI_OBSTACLE forward obstacle monitor. GPS 줄과 동일 레이아웃. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '12px'
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: '9px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            color: 'rgba(236, 223, 204, 0.45)'
+          }}
+        >
+          KETI
+        </span>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <div
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: ketiColor,
+              boxShadow: ketiValid ? `0 0 8px ${ketiColor}` : 'none',
+              transition: 'all 0.3s ease'
+            }}
+          />
+          <span
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '10px',
+              fontWeight: 700,
+              color: ketiValid ? (ketiObstacle ? '#f5c842' : ACCENT) : 'rgba(236, 223, 204, 0.35)',
+              letterSpacing: '0.05em',
+              transition: 'color 0.3s ease'
+            }}
+          >
+            {ketiLabel}
           </span>
         </div>
       </div>

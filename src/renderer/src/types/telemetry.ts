@@ -55,6 +55,26 @@ export interface StatusData {
   gpsFix?: number
   /** Satellites visible from GPS_RAW_INT. */
   satellites?: number
+  /** LIHAI serial link up (LIHAI_STATUS byte 0). */
+  lihaiLink?: boolean
+  /** LIHAI subsystem error flags (LIHAI_STATUS bytes 1..7, 0 = OK, nonzero = error). */
+  lihaiErrors?: { bat: number; gps: number; imu: number; baro: number; rc: number; angle: number; pos: number }
+  /** KETI detection valid (KETI_OBSTACLE byte 20). */
+  ketiValid?: boolean
+  /** KETI total object count (KETI_OBSTACLE byte 21). */
+  ketiCount?: number
+  /** KETI nearest-object class id (KETI_OBSTACLE byte 22). */
+  ketiId?: number
+  /** KETI nearest-object distance in metres (KETI_OBSTACLE offset 0). */
+  ketiDistance?: number
+  /** KETI nearest-object relative x in metres (KETI_OBSTACLE offset 4). */
+  ketiObjX?: number
+  /** KETI nearest-object relative y in metres (KETI_OBSTACLE offset 8). */
+  ketiObjY?: number
+  /** KETI nearest-object relative z in metres (KETI_OBSTACLE offset 12). */
+  ketiObjZ?: number
+  /** KETI nearest-object size (KETI_OBSTACLE offset 16). */
+  ketiSize?: number
   battery: BatteryData
   cpuLoad: number // % (0..100)
 }

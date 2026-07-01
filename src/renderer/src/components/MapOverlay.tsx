@@ -6,6 +6,8 @@ import { AvionicsPanel } from './panels/AvionicsPanel'
 import { TelemetryPanel } from './panels/TelemetryPanel'
 import { ChartPanel } from './panels/ChartPanel'
 import { LogPanel } from './panels/LogPanel'
+import { LihaiPanel } from './panels/LihaiPanel'
+import { KetiPanel } from './panels/KetiPanel'
 import { MissionView } from './MissionView'
 import { ParameterView } from '@renderer/features/builder'
 import { TestView } from './test/TestView'
@@ -42,7 +44,9 @@ export function MapOverlay() {
     instruments: false,
     chart: false,
     log: false,
-    telemetry: false
+    telemetry: false,
+    lihai: false,
+    keti: false
   })
 
   const toggle = (key: keyof typeof collapsed) =>
@@ -110,6 +114,28 @@ export function MapOverlay() {
                 onDragHandle={handle}
                 collapsed={collapsed.log}
                 onToggle={() => toggle('log')}
+              />
+            )}
+          </DraggablePanel>
+
+          {/* Inner-right: LIHAI status */}
+          <DraggablePanel initialX={window.innerWidth - 480} initialY={68}>
+            {(handle) => (
+              <LihaiPanel
+                onDragHandle={handle}
+                collapsed={collapsed.lihai}
+                onToggle={() => toggle('lihai')}
+              />
+            )}
+          </DraggablePanel>
+
+          {/* Inner-right: KETI obstacle */}
+          <DraggablePanel initialX={window.innerWidth - 480} initialY={320}>
+            {(handle) => (
+              <KetiPanel
+                onDragHandle={handle}
+                collapsed={collapsed.keti}
+                onToggle={() => toggle('keti')}
               />
             )}
           </DraggablePanel>
