@@ -140,6 +140,7 @@ export class MavlinkParser extends EventEmitter {
         cpuLoad: 0,
         lihaiLink: false,
         lihaiErrors: { bat: 0, gps: 0, imu: 0, baro: 0, rc: 0, angle: 0, pos: 0 },
+        lihaiRxMs: 0,
         ketiValid: false,
         ketiCount: 0,
         ketiId: 0,
@@ -147,7 +148,8 @@ export class MavlinkParser extends EventEmitter {
         ketiObjX: 0,
         ketiObjY: 0,
         ketiObjZ: 0,
-        ketiSize: 0
+        ketiSize: 0,
+        ketiRxMs: 0
       },
       heading: 0,
       throttle: 0,
@@ -533,6 +535,7 @@ export class MavlinkParser extends EventEmitter {
         angle: lihai.angleControlError,
         pos: lihai.positionControlError
       }
+      this.telemetryState.status.lihaiRxMs = Date.now()
     }
 
     this.tryEmitTelemetry()
@@ -554,6 +557,7 @@ export class MavlinkParser extends EventEmitter {
       this.telemetryState.status.ketiObjY = keti.objY
       this.telemetryState.status.ketiObjZ = keti.objZ
       this.telemetryState.status.ketiSize = keti.size
+      this.telemetryState.status.ketiRxMs = Date.now()
     }
 
     this.tryEmitTelemetry()

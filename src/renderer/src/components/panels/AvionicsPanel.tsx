@@ -96,19 +96,26 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
   const gps3D = gpsFix >= 3
   const gpsLabel = gpsFix >= 3 ? `3D · ${satellites}` : gpsFix === 2 ? `2D · ${satellites}` : 'NO FIX'
 
-  // LIHAI — LIHAI_STATUS link + subsystem error flags
-  const lihaiLink = telemetry?.status?.lihaiLink ?? false
-  const lihaiErrors = telemetry?.status?.lihaiErrors
-  const lihaiHasError = lihaiErrors ? Object.values(lihaiErrors).some((v) => v !== 0) : false
-  const lihaiColor = !lihaiLink ? 'rgba(236, 223, 204, 0.2)' : lihaiHasError ? '#f5c842' : ACCENT
-  const lihaiLabel = !lihaiLink ? 'NO LINK' : lihaiHasError ? 'ERROR' : 'OK'
+  // LIHAI / KETI — CONNECTED = 커스텀 메시지를 최근에 수신했는지(신선도). RC와 동일 개념.
+  const now = Date.now()
+  const LINK_STALE_MS = 2000 // FCC가 250ms마다 송신 → 2s 무수신이면 NO LINK
 
-  // KETI — KETI_OBSTACLE forward obstacle monitor
+  // LIHAI — 수신 여부 + 서브시스템 에러 플래그 (상세는 LihaiPanel)
+  const lihaiRxMs = telemetry?.status?.lihaiRxMs ?? 0
+  const lihaiConnected = lihaiRxMs > 0 && now - lihaiRxMs < LINK_STALE_MS
+  const lihaiErrors = telemetry?.status?.lihaiErrors
+  const lihaiHasError = lihaiConnected && lihaiErrors ? Object.values(lihaiErrors).some((v) => v !== 0) : false
+  const lihaiColor = !lihaiConnected ? 'rgba(236, 223, 204, 0.2)' : lihaiHasError ? '#f5c842' : ACCENT
+  const lihaiLabel = !lihaiConnected ? 'NO LINK' : lihaiHasError ? 'ERROR' : 'CONNECTED'
+
+  // KETI — 수신 여부 + 전방 장애물 (상세는 KetiPanel)
+  const ketiRxMs = telemetry?.status?.ketiRxMs ?? 0
+  const ketiConnected = ketiRxMs > 0 && now - ketiRxMs < LINK_STALE_MS
   const ketiValid = telemetry?.status?.ketiValid ?? false
   const ketiDistance = telemetry?.status?.ketiDistance ?? 0
-  const ketiObstacle = ketiValid && ketiDistance > 0
-  const ketiColor = !ketiValid ? 'rgba(236, 223, 204, 0.2)' : ketiObstacle ? '#f5c842' : ACCENT
-  const ketiLabel = !ketiValid ? 'NO LINK' : ketiObstacle ? `OBST ${ketiDistance.toFixed(1)}m` : 'CLEAR'
+  const ketiObstacle = ketiConnected && ketiValid && ketiDistance > 0
+  const ketiColor = !ketiConnected ? 'rgba(236, 223, 204, 0.2)' : ketiObstacle ? '#f5c842' : ACCENT
+  const ketiLabel = !ketiConnected ? 'NO LINK' : ketiObstacle ? `OBST ${ketiDistance.toFixed(1)}m` : 'CONNECTED'
   const systemStatus = telemetry?.status?.systemStatus ?? '--'
   const linkState = connection?.linkState ?? 'DISCONNECTED'
 
@@ -413,7 +420,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
               height: '6px',
               borderRadius: '50%',
               background: lihaiColor,
-              boxShadow: lihaiLink ? `0 0 8px ${lihaiColor}` : 'none',
+              boxShadow: lihaiConnected ? `0 0 8px ${lihaiColor}` : 'none',
               transition: 'all 0.3s ease'
             }}
           />
@@ -422,7 +429,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: '10px',
               fontWeight: 700,
-              color: lihaiLink ? lihaiColor : 'rgba(236, 223, 204, 0.35)',
+              color: lihaiConnected ? lihaiColor : 'rgba(236, 223, 204, 0.35)',
               letterSpacing: '0.05em',
               transition: 'color 0.3s ease'
             }}
@@ -466,7 +473,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
               height: '6px',
               borderRadius: '50%',
               background: ketiColor,
-              boxShadow: ketiValid ? `0 0 8px ${ketiColor}` : 'none',
+              boxShadow: ketiConnected ? `0 0 8px ${ketiColor}` : 'none',
               transition: 'all 0.3s ease'
             }}
           />
@@ -475,7 +482,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: '10px',
               fontWeight: 700,
-              color: ketiValid ? (ketiObstacle ? '#f5c842' : ACCENT) : 'rgba(236, 223, 204, 0.35)',
+              color: ketiConnected ? (ketiObstacle ? '#f5c842' : ACCENT) : 'rgba(236, 223, 204, 0.35)',
               letterSpacing: '0.05em',
               transition: 'color 0.3s ease'
             }}

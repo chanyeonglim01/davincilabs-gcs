@@ -64,7 +64,10 @@ function FlagRow({ label, state, color }: { label: string; state: string; color:
 
 export function LihaiPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const status = useTelemetryStore((s) => s.telemetry?.status)
-  const errors = status?.lihaiErrors
+  // CONNECTED = LIHAI_STATUS를 최근에 수신(2s 신선도). 무수신이면 상세값 숨김.
+  const rxMs = status?.lihaiRxMs ?? 0
+  const connected = rxMs > 0 && Date.now() - rxMs < 2000
+  const errors = connected ? status?.lihaiErrors : undefined
   const hasError = errors ? Object.values(errors).some((v) => v !== 0) : false
 
   return (
@@ -128,10 +131,10 @@ export function LihaiPanel({ onDragHandle, collapsed, onToggle }: Props) {
               width: '6px',
               height: '6px',
               borderRadius: '50%',
-              background: hasError ? WARN_AMBER : OK_GREEN,
-              boxShadow: hasError ? 'none' : `0 0 6px ${OK_GREEN}`
+              background: !connected ? 'rgba(236, 223, 204, 0.25)' : hasError ? WARN_AMBER : OK_GREEN,
+              boxShadow: !connected ? 'none' : hasError ? 'none' : `0 0 6px ${OK_GREEN}`
             }}
-            title={hasError ? 'ERROR' : 'OK'}
+            title={!connected ? 'NO LINK' : hasError ? 'ERROR' : 'OK'}
           />
         </div>
         <span style={{ color: 'rgba(236, 223, 204, 0.3)', fontSize: '10px' }}>
@@ -141,6 +144,12 @@ export function LihaiPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
       {!collapsed && (
         <div>
+          {/* Link status — CONNECTED when LIHAI_STATUS is being received */}
+          <FlagRow
+            label="LINK"
+            state={connected ? 'CONNECTED' : 'NO LINK'}
+            color={connected ? OK_GREEN : 'rgba(236, 223, 204, 0.3)'}
+          />
           {/* Subsystem error flags */}
           {FLAGS.map((flag) => {
             const val = errors ? errors[flag.key] : undefined

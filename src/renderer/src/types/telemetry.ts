@@ -59,6 +59,8 @@ export interface StatusData {
   lihaiLink?: boolean
   /** LIHAI subsystem error flags (LIHAI_STATUS bytes 1..7, 0 = OK, nonzero = error). */
   lihaiErrors?: { bat: number; gps: number; imu: number; baro: number; rc: number; angle: number; pos: number }
+  /** Timestamp (ms, Date.now) of last LIHAI_STATUS received. >0 & fresh = CONNECTED. */
+  lihaiRxMs?: number
   /** KETI detection valid (KETI_OBSTACLE byte 20). */
   ketiValid?: boolean
   /** KETI total object count (KETI_OBSTACLE byte 21). */
@@ -75,6 +77,8 @@ export interface StatusData {
   ketiObjZ?: number
   /** KETI nearest-object size (KETI_OBSTACLE offset 16). */
   ketiSize?: number
+  /** Timestamp (ms, Date.now) of last KETI_OBSTACLE received. >0 & fresh = CONNECTED. */
+  ketiRxMs?: number
   battery: BatteryData
   cpuLoad: number // % (0..100)
 }
