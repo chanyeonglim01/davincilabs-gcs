@@ -35,6 +35,9 @@ importers:
       lucide-react:
         specifier: ^0.564.0
         version: 0.564.0(react@19.2.4)
+      ms:
+        specifier: ^2.1.3
+        version: 2.1.3
       node-mavlink:
         specifier: ^2.3.0
         version: 2.3.0(@types/node@22.19.11)(typescript@5.9.3)
