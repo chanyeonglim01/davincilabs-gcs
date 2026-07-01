@@ -5,15 +5,11 @@ export type DesignMode = 'none' | 'waypoint' | 'survey-polygon'
 
 export type ActionKey =
   | 'VTOL_TAKEOFF'
-  | 'MC_TAKEOFF'
-  | 'FW_TAKEOFF'
   | 'WAYPOINT'
   | 'LOITER'
   | 'VTOL_TRANSITION_FW'
   | 'VTOL_TRANSITION_MC'
   | 'VTOL_LAND'
-  | 'MC_LAND'
-  | 'FW_LAND'
   | 'RTL'
 
 export interface Waypoint {

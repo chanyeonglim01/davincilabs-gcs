@@ -149,33 +149,27 @@ function buildMissionItemInt(
 }
 
 // ─── Action → MAVLink params ───────────────────────────────────────────────────
+// Simulink UAV Toolbox PathManager rejects NaN params (validateattributes).
+// MAVLink convention uses NaN for "unspecified/default"; substitute safe values.
+const DEFAULT_MISSION_SPEED = 10 // m/s — used when waypoint speed is unspecified
+const DEFAULT_HEADING = 0 // deg — used when waypoint heading is unspecified
+
 function actionToParams(wp: MissionWaypoint): ItemParams {
   switch (wp.action) {
     case 'VTOL_TAKEOFF':
+      // Sim mission pipeline has no "lat/lon=0 → current position" semantics,
+      // so send the waypoint's explicit coords (UI seeds these with the live
+      // drone position when the takeoff item is created).
       return {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 84,
         autocontinue: 1,
-        param1: wp.speed ?? NaN,
+        param1: wp.speed ?? DEFAULT_MISSION_SPEED,
         param2: 0,
         param3: 0,
-        param4: wp.heading ?? NaN,
-        lat: 0, // 0 = use current drone position
-        lon: 0,
-        alt: wp.alt
-      }
-    case 'MC_TAKEOFF':
-    case 'FW_TAKEOFF':
-      return {
-        frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
-        command: 22,
-        autocontinue: 1,
-        param1: wp.speed ?? NaN,
-        param2: 0,
-        param3: 0,
-        param4: wp.heading ?? NaN,
-        lat: 0, // 0 = use current drone position
-        lon: 0,
+        param4: wp.heading ?? DEFAULT_HEADING,
+        lat: wp.lat,
+        lon: wp.lon,
         alt: wp.alt
       }
     case 'WAYPOINT':
@@ -183,8 +177,8 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 16,
         autocontinue: 1,
-        param1: wp.speed ?? NaN,
-        param2: wp.heading ?? NaN,
+        param1: wp.speed ?? DEFAULT_MISSION_SPEED,
+        param2: wp.heading ?? DEFAULT_HEADING,
         param3: wp.acceptRadius,
         param4: wp.holdTime ?? 0,
         lat: wp.lat,
@@ -235,27 +229,13 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
         command: 85,
         autocontinue: 1,
-        param1: wp.speed ?? NaN,
+        param1: wp.speed ?? DEFAULT_MISSION_SPEED,
         param2: 0,
         param3: 0,
-        param4: wp.heading ?? NaN,
+        param4: wp.heading ?? DEFAULT_HEADING,
         lat: wp.lat,
         lon: wp.lon,
         alt: wp.alt
-      }
-    case 'MC_LAND':
-    case 'FW_LAND':
-      return {
-        frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
-        command: 21,
-        autocontinue: 1,
-        param1: wp.speed ?? NaN,
-        param2: 0,
-        param3: 0,
-        param4: wp.heading ?? NaN,
-        lat: wp.lat,
-        lon: wp.lon,
-        alt: 0
       }
     case 'RTL':
       return {
@@ -279,7 +259,7 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
         param1: 0,
         param2: wp.acceptRadius,
         param3: 0,
-        param4: NaN,
+        param4: 0,
         lat: wp.lat,
         lon: wp.lon,
         alt: wp.alt
@@ -370,8 +350,10 @@ export class MissionUploader {
   onAck(type: number): void {
     if (this.done) return
     if (type === MAV_MISSION_ACCEPTED) {
+      console.log(`[Mission] ACK received (type=${type}) → upload completed (${this.items.length} items)`)
       this.finish({ success: true, count: this.items.length })
     } else {
+      console.log(`[Mission] ACK received (type=${type}) → upload rejected`)
       this.finish({
         success: false,
         count: 0,

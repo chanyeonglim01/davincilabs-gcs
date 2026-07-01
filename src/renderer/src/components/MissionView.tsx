@@ -45,14 +45,14 @@ interface ActionDef {
   mavCmd: number
   hasAlt: boolean
   icon: string
-  group: 'vtol' | 'mc' | 'fw' | 'common'
+  group: 'vtol' | 'common'
 }
 
 const ACTIONS: Record<ActionKey, ActionDef> = {
   VTOL_TAKEOFF: {
-    label: 'VTOL Takeoff',
+    label: 'Takeoff',
     short: 'T/O',
-    color: '#A5D6A7',
+    color: '#8B9D6B',
     mavCmd: MAV_CMD.VTOL_TAKEOFF,
     hasAlt: true,
     icon: '↑',
@@ -61,7 +61,7 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   VTOL_TRANSITION_FW: {
     label: 'Transition → FW',
     short: '→FW',
-    color: '#FFB74D',
+    color: '#C2A15E',
     mavCmd: MAV_CMD.VTOL_TRANSITION,
     hasAlt: false,
     icon: '⇒',
@@ -70,61 +70,25 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   VTOL_TRANSITION_MC: {
     label: 'Transition → MC',
     short: '→MC',
-    color: '#FFB74D',
+    color: '#C2A15E',
     mavCmd: MAV_CMD.VTOL_TRANSITION,
     hasAlt: false,
     icon: '⇐',
     group: 'vtol'
   },
   VTOL_LAND: {
-    label: 'VTOL Land',
+    label: 'Land',
     short: 'LND',
-    color: '#E87020',
+    color: '#B06F5C',
     mavCmd: MAV_CMD.VTOL_LAND,
     hasAlt: true,
     icon: '↓',
     group: 'vtol'
   },
-  MC_TAKEOFF: {
-    label: 'MC Takeoff',
-    short: 'MC↑',
-    color: '#80CBC4',
-    mavCmd: MAV_CMD.TAKEOFF,
-    hasAlt: true,
-    icon: '↑',
-    group: 'mc'
-  },
-  MC_LAND: {
-    label: 'MC Land',
-    short: 'MC↓',
-    color: '#80CBC4',
-    mavCmd: MAV_CMD.LAND,
-    hasAlt: false,
-    icon: '↓',
-    group: 'mc'
-  },
-  FW_TAKEOFF: {
-    label: 'FW Takeoff',
-    short: 'FW↑',
-    color: '#CE93D8',
-    mavCmd: MAV_CMD.TAKEOFF,
-    hasAlt: true,
-    icon: '↑',
-    group: 'fw'
-  },
-  FW_LAND: {
-    label: 'FW Land',
-    short: 'FW↓',
-    color: '#CE93D8',
-    mavCmd: MAV_CMD.LAND,
-    hasAlt: false,
-    icon: '↓',
-    group: 'fw'
-  },
   WAYPOINT: {
     label: 'Waypoint',
     short: 'WP',
-    color: '#4FC3F7',
+    color: '#B6AC97',
     mavCmd: MAV_CMD.WAYPOINT,
     hasAlt: true,
     icon: '●',
@@ -133,7 +97,7 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   LOITER: {
     label: 'Loiter',
     short: 'LTR',
-    color: '#B39DDB',
+    color: '#B6AC97',
     mavCmd: MAV_CMD.LOITER_UNLIM,
     hasAlt: true,
     icon: '⟳',
@@ -142,7 +106,7 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   RTL: {
     label: 'Return to Launch',
     short: 'RTL',
-    color: '#FF8A80',
+    color: '#B6AC97',
     mavCmd: MAV_CMD.RTL,
     hasAlt: false,
     icon: '⌂',
@@ -154,8 +118,6 @@ const ACTION_KEYS = Object.keys(ACTIONS) as ActionKey[]
 
 const GROUPS: { key: string; label: string }[] = [
   { key: 'vtol', label: 'VTOL' },
-  { key: 'mc', label: 'MC' },
-  { key: 'fw', label: 'FW' },
   { key: 'common', label: 'NAV' }
 ]
 
@@ -476,7 +438,7 @@ export function MissionView() {
 
     if (navPoints.length >= 2) {
       polylineRef.current = L.polyline(navPoints, {
-        color: 'rgba(79,195,247,0.75)',
+        color: '#FFFFFF',
         weight: 3,
         dashArray: '8 5'
       }).addTo(map)
@@ -825,13 +787,30 @@ export function MissionView() {
     const def = ACTIONS[action]
     const last = waypoints[waypoints.length - 1]
     const uid = nextUid()
+    // Takeoff with no prior waypoint → initialize at the drone's current
+    // (live) GPS position. Falls back to default coords if not yet available.
+    const livePos = useTelemetryStore.getState().telemetry?.position
+    const liveValid =
+      !!livePos && (livePos.lat !== 0 || livePos.lon !== 0)
+    let lat: number
+    let lon: number
+    if (last) {
+      lat = last.lat + 0.001
+      lon = last.lon + 0.001
+    } else if (action === 'VTOL_TAKEOFF' && liveValid && livePos) {
+      lat = livePos.lat
+      lon = livePos.lon
+    } else {
+      lat = 37.5665
+      lon = 126.978
+    }
     setWaypoints((prev) => [
       ...prev,
       {
         uid,
         action,
-        lat: last ? last.lat + 0.001 : 37.5665,
-        lon: last ? last.lon + 0.001 : 126.978,
+        lat,
+        lon,
         alt: def.hasAlt ? defaultAlt : 0,
         acceptRadius: 5,
         loiterRadius: 50
@@ -1137,10 +1116,10 @@ export function MissionView() {
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
             padding: '5px 16px',
-            background: waypoints.length === 0 ? 'transparent' : 'rgba(79,195,247,0.12)',
-            border: `1px solid ${waypoints.length === 0 ? 'rgba(236,223,204,0.1)' : 'rgba(79,195,247,0.45)'}`,
+            background: waypoints.length === 0 ? 'transparent' : 'rgba(236,223,204,0.12)',
+            border: `1px solid ${waypoints.length === 0 ? 'rgba(236,223,204,0.1)' : 'rgba(236,223,204,0.45)'}`,
             borderRadius: '4px',
-            color: waypoints.length === 0 ? 'rgba(236,223,204,0.2)' : '#4FC3F7',
+            color: waypoints.length === 0 ? 'rgba(236,223,204,0.2)' : '#ECDFCC',
             cursor: waypoints.length === 0 ? 'default' : 'pointer'
           }}
         >
@@ -1292,14 +1271,14 @@ export function MissionView() {
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
                 padding: '3px 8px',
-                background: 'rgba(165,214,167,0.08)',
-                border: '1px solid rgba(165,214,167,0.3)',
+                background: 'rgba(139,157,107,0.08)',
+                border: '1px solid rgba(139,157,107,0.3)',
                 borderRadius: '3px',
-                color: '#A5D6A7',
+                color: '#8B9D6B',
                 cursor: 'pointer'
               }}
             >
-              + VTOL T/O
+              + T/O
             </button>
           </div>
 

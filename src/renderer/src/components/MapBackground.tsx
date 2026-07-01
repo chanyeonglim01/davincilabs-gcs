@@ -38,17 +38,13 @@ const TILES: Record<string, { url: string; maxZoom: number; subdomains?: string 
 }
 
 const ACTION_COLORS: Record<ActionKey, string> = {
-  VTOL_TAKEOFF: '#A5D6A7',
-  VTOL_TRANSITION_FW: '#FFB74D',
-  VTOL_TRANSITION_MC: '#FFB74D',
-  VTOL_LAND: '#E87020',
-  MC_TAKEOFF: '#80CBC4',
-  MC_LAND: '#80CBC4',
-  FW_TAKEOFF: '#CE93D8',
-  FW_LAND: '#CE93D8',
-  WAYPOINT: '#4FC3F7',
-  LOITER: '#B39DDB',
-  RTL: '#FF8A80'
+  VTOL_TAKEOFF: '#8B9D6B',
+  VTOL_TRANSITION_FW: '#C2A15E',
+  VTOL_TRANSITION_MC: '#C2A15E',
+  VTOL_LAND: '#B06F5C',
+  WAYPOINT: '#B6AC97',
+  LOITER: '#B6AC97',
+  RTL: '#B6AC97'
 }
 
 type TileMode = 'dark' | 'satellite'
@@ -71,6 +67,7 @@ export function MapBackground() {
     zoom: number
   } | null>(null)
   const { telemetry, history } = useTelemetryStore()
+  const mapCenterRequestId = useTelemetryStore((s) => s.mapCenterRequestId)
   const { waypoints } = useMissionStore()
 
   // Mission overlay refs
@@ -79,6 +76,9 @@ export function MapBackground() {
 
   // Drone trail ref
   const droneTrailRef = useRef<L.Polyline | null>(null)
+
+  // Auto-center: one-shot when first valid GPS arrives
+  const autoCenteredRef = useRef(false)
 
   // Initialize map
   useEffect(() => {
@@ -165,6 +165,27 @@ export function MapBackground() {
     }
   }, [telemetry?.position?.lat, telemetry?.position?.lon, telemetry?.heading])
 
+  // Auto-center map on first valid GPS (Mission Planner style)
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map || autoCenteredRef.current) return
+    if (!telemetry) return
+    const { lat, lon } = telemetry.position
+    if (lat === 0 && lon === 0) return
+    map.setView([lat, lon], 18, { animate: false })
+    autoCenteredRef.current = true
+  }, [telemetry?.position?.lat, telemetry?.position?.lon])
+
+  // Manual recenter request (TAKEOFF button or explicit user action)
+  useEffect(() => {
+    if (mapCenterRequestId === 0) return
+    const map = mapInstanceRef.current
+    if (!map || !telemetry) return
+    const { lat, lon } = telemetry.position
+    if (lat === 0 && lon === 0) return
+    map.setView([lat, lon], 18, { animate: true })
+  }, [mapCenterRequestId])
+
   // Mission waypoint overlay
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -187,7 +208,7 @@ export function MapBackground() {
     if (navPoints.length >= 2) {
       const coords: L.LatLngExpression[] = navPoints.map((w) => [w.lat, w.lon])
       missionPolylineRef.current = L.polyline(coords, {
-        color: 'rgba(79,195,247,0.75)',
+        color: '#FFFFFF',
         weight: 3,
         dashArray: '8 5',
         interactive: false

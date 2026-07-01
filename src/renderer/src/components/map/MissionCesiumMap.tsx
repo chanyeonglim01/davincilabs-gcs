@@ -17,17 +17,13 @@ const DEFAULT_LAT = 37.5665
 
 // ─── Action metadata (colors + alt flag) ────────────────────────────────────
 const WP_COLOR: Record<string, string> = {
-  VTOL_TAKEOFF: '#A5D6A7',
-  VTOL_TRANSITION_FW: '#FFB74D',
-  VTOL_TRANSITION_MC: '#FFB74D',
-  VTOL_LAND: '#E87020',
-  MC_TAKEOFF: '#80CBC4',
-  MC_LAND: '#80CBC4',
-  FW_TAKEOFF: '#CE93D8',
-  FW_LAND: '#CE93D8',
-  WAYPOINT: '#4FC3F7',
-  LOITER: '#B39DDB',
-  RTL: '#FF8A80'
+  VTOL_TAKEOFF: '#8B9D6B',
+  VTOL_TRANSITION_FW: '#C2A15E',
+  VTOL_TRANSITION_MC: '#C2A15E',
+  VTOL_LAND: '#B06F5C',
+  WAYPOINT: '#B6AC97',
+  LOITER: '#B6AC97',
+  RTL: '#B6AC97'
 }
 
 const HAS_ALT: Record<string, boolean> = {
@@ -35,10 +31,6 @@ const HAS_ALT: Record<string, boolean> = {
   VTOL_TRANSITION_FW: false,
   VTOL_TRANSITION_MC: false,
   VTOL_LAND: true,
-  MC_TAKEOFF: true,
-  MC_LAND: false,
-  FW_TAKEOFF: true,
-  FW_LAND: false,
   WAYPOINT: true,
   LOITER: true,
   RTL: false
@@ -501,7 +493,7 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
             ),
             width: 3,
             material: new Cesium.PolylineDashMaterialProperty({
-              color: Cesium.Color.fromCssColorString('#4FC3F7').withAlpha(0.75),
+              color: Cesium.Color.fromCssColorString('#FFFFFF'),
               dashLength: 16
             }),
             clampToGround: false

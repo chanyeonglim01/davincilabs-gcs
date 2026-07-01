@@ -4,6 +4,7 @@ import { useTelemetryStore } from '../store/telemetryStore'
 export function useMavlink() {
   const setTelemetry = useTelemetryStore((state) => state.setTelemetry)
   const setConnection = useTelemetryStore((state) => state.setConnection)
+  const setHomePosition = useTelemetryStore((state) => state.setHomePosition)
 
   useEffect(() => {
     // Check if window.mavlink is available (it will be provided by the Backend agent)
@@ -22,6 +23,11 @@ export function useMavlink() {
       setConnection(status)
     })
 
+    // Setup home position listener (set once on first valid GPS fix)
+    const unsubscribeHome = window.mavlink.onHomePosition((home) => {
+      setHomePosition(home)
+    })
+
     // Fetch initial connection status (handles auto-connect race condition)
     window.mavlink
       .getConnectionStatus()
@@ -36,6 +42,7 @@ export function useMavlink() {
     return () => {
       if (unsubscribeTelemetry) unsubscribeTelemetry()
       if (unsubscribeConnection) unsubscribeConnection()
+      if (unsubscribeHome) unsubscribeHome()
     }
-  }, [setTelemetry, setConnection])
+  }, [setTelemetry, setConnection, setHomePosition])
 }

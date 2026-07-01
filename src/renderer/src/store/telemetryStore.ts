@@ -1,15 +1,21 @@
 import { create } from 'zustand'
-import type { TelemetryData, ConnectionStatus } from '@renderer/types'
+import type { TelemetryData, ConnectionStatus, HomePosition } from '@renderer/types'
 
 interface TelemetryStore {
   telemetry: TelemetryData | null
   connection: ConnectionStatus
   history: TelemetryData[]
   maxHistorySize: number
+  /** Increments when user requests map to recenter on drone (TAKEOFF or manual). */
+  mapCenterRequestId: number
+  /** Drone home position — set once on first valid GPS fix. null until then. */
+  homePosition: HomePosition | null
 
   setTelemetry: (data: TelemetryData) => void
   setConnection: (status: ConnectionStatus) => void
+  setHomePosition: (home: HomePosition) => void
   clearHistory: () => void
+  requestMapCenter: () => void
 }
 
 export const useTelemetryStore = create<TelemetryStore>((set) => ({
@@ -24,6 +30,8 @@ export const useTelemetryStore = create<TelemetryStore>((set) => ({
   },
   history: [],
   maxHistorySize: 300, // 10 seconds at 30Hz
+  mapCenterRequestId: 0,
+  homePosition: null,
 
   setTelemetry: (data) =>
     set((state) => ({
@@ -32,5 +40,7 @@ export const useTelemetryStore = create<TelemetryStore>((set) => ({
     })),
 
   setConnection: (status) => set({ connection: status }),
-  clearHistory: () => set({ history: [] })
+  setHomePosition: (home) => set({ homePosition: home }),
+  clearHistory: () => set({ history: [] }),
+  requestMapCenter: () => set((s) => ({ mapCenterRequestId: s.mapCenterRequestId + 1 }))
 }))

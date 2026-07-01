@@ -67,25 +67,19 @@ export function MapOverlay() {
           {/* Full-screen map */}
           <MapBackground />
 
-          {/* Right column: Avionics + Status stacked */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '68px',
-              right: '20px',
-              zIndex: 1100,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px'
-            }}
-          >
-            <AvionicsPanel />
-            <TelemetryPanel
-              onDragHandle={() => {}}
-              collapsed={collapsed.telemetry}
-              onToggle={() => toggle('telemetry')}
-            />
-          </div>
+          {/* Right column: Avionics + Status stacked — draggable */}
+          <DraggablePanel initialX={window.innerWidth - 240} initialY={68}>
+            {(handle) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <AvionicsPanel onDragHandle={handle} />
+                <TelemetryPanel
+                  onDragHandle={handle}
+                  collapsed={collapsed.telemetry}
+                  onToggle={() => toggle('telemetry')}
+                />
+              </div>
+            )}
+          </DraggablePanel>
 
           {/* Top-left: Instruments (open) */}
           <DraggablePanel initialX={20} initialY={68}>
