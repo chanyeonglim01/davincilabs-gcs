@@ -60,7 +60,9 @@ export function TelemetryPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
   const lat = telemetry?.position?.lat?.toFixed(5) ?? '--'
   const lon = telemetry?.position?.lon?.toFixed(5) ?? '--'
-  const alt = telemetry?.position?.relative_alt?.toFixed(1) ?? '--'
+  // NED 음수 = 위로 상승. UI 는 UP altitude 양수로 표시.
+  const altRaw = telemetry?.position?.relative_alt
+  const alt = altRaw != null ? (-altRaw).toFixed(1) : '--'
   const gspd = telemetry?.velocity?.groundspeed?.toFixed(1) ?? '--'
   const aspd = telemetry?.velocity?.airspeed?.toFixed(1) ?? '--'
   const bat = telemetry?.status?.battery?.remaining?.toFixed(0) ?? '--'

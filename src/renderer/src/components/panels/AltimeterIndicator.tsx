@@ -8,12 +8,14 @@ export function AltimeterIndicator({ altitude, size = 140 }: Props) {
   const cy = size / 2
   const r = size * 0.42
 
+  // NED 좌표: altitude 음수 = 위로 상승. 게이지에는 UP altitude (양수) 로 표시.
+  const upAlt = -altitude
   // 0~200m range, 300° arc
   const minAlt = 0
   const maxAlt = 200
   const startAngle = 30
   const endAngle = 330
-  const clamped = Math.max(minAlt, Math.min(maxAlt, altitude))
+  const clamped = Math.max(minAlt, Math.min(maxAlt, upAlt))
   const pct = (clamped - minAlt) / (maxAlt - minAlt)
   const needleAngle = startAngle + pct * (endAngle - startAngle)
 
@@ -146,6 +148,19 @@ export function AltimeterIndicator({ altitude, size = 140 }: Props) {
         letterSpacing="0.1em"
       >
         m
+      </text>
+
+      {/* Digital readout — UP altitude 양수 (NED 부호반전) */}
+      <text
+        x={cx}
+        y={cy - r * 0.3}
+        textAnchor="middle"
+        fontSize={size * 0.12}
+        fill="#ECDFCC"
+        fontFamily="JetBrains Mono, monospace"
+        fontWeight="bold"
+      >
+        {upAlt.toFixed(1)}
       </text>
     </svg>
   )

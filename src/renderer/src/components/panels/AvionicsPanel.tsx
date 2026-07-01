@@ -47,12 +47,19 @@ const MODE_ENTRIES: ModeEntry[] = [
 
 const ACCENT = '#A5D6A7'
 
-// Fixed panel - no drag
-export function AvionicsPanel(): React.JSX.Element {
+interface AvionicsPanelProps {
+  onDragHandle?: (e: React.MouseEvent) => void
+}
+
+export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.Element {
   const [confirming, setConfirming] = useState<(typeof COMMANDS)[0] | null>(null)
   const [loading, setLoading] = useState(false)
   const [missionConfirmOpen, setMissionConfirmOpen] = useState(false)
   const [missionLoading, setMissionLoading] = useState(false)
+  const [modeConfirming, setModeConfirming] = useState<ModeEntry | null>(null)
+  const [modeLoading, setModeLoading] = useState(false)
+
+  const requestMapCenter = useTelemetryStore((s) => s.requestMapCenter)
 
   const handleConfirm = async (): Promise<void> => {
     if (!confirming || !window.mavlink) {
@@ -62,6 +69,10 @@ export function AvionicsPanel(): React.JSX.Element {
     setLoading(true)
     try {
       await window.mavlink.sendCommand({ type: confirming.type, params: confirming.params })
+      // TAKEOFF 직후 home 점(현재 GPS) 기준으로 지도 자동 중심
+      if (confirming.type === 'TAKEOFF') {
+        requestMapCenter()
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -74,10 +85,16 @@ export function AvionicsPanel(): React.JSX.Element {
   const waypoints = useMissionStore((s) => s.waypoints)
 
   const armed = telemetry?.status?.armed ?? false
-  const flightMode = telemetry?.status?.flightMode ?? 'UNKNOWN'
+  const flightModePrimary = telemetry?.status?.flightModePrimary ?? 'UNKNOWN'
+  const flightModeSub = telemetry?.status?.flightModeSub ?? ''
   const flightModeRaw = telemetry?.status?.flightModeRaw ?? -1
   const subState = telemetry?.status?.subState ?? 0
   const rcOverride = telemetry?.status?.rcOverride ?? false
+  const rcLink = telemetry?.status?.rcLink ?? false
+  const gpsFix = telemetry?.status?.gpsFix ?? 0
+  const satellites = telemetry?.status?.satellites ?? 0
+  const gps3D = gpsFix >= 3
+  const gpsLabel = gpsFix >= 3 ? `3D · ${satellites}` : gpsFix === 2 ? `2D · ${satellites}` : 'NO FIX'
   const systemStatus = telemetry?.status?.systemStatus ?? '--'
   const linkState = connection?.linkState ?? 'DISCONNECTED'
 
@@ -86,11 +103,33 @@ export function AvionicsPanel(): React.JSX.Element {
   const yawSigned = ((telemetry?.attitude?.yaw ?? 0) * 180) / Math.PI
   const yaw = ((yawSigned % 360) + 360) % 360
 
-  // Mode 진입 핸들러 — ArduPilot 스타일 분리
+  // Mode 진입 핸들러 — ArduPilot 스타일 분리. confirmMessage 있으면 커스텀 모달.
   const handleModeClick = (entry: ModeEntry): void => {
     if (!window.mavlink) return
-    if (entry.confirmMessage && !window.confirm(entry.confirmMessage)) return
+    if (entry.confirmMessage) {
+      setModeConfirming(entry)
+      return
+    }
     void window.mavlink.sendCommand({ type: 'SET_MODE', params: { mode: entry.modeName } })
+  }
+
+  const handleModeConfirm = async (): Promise<void> => {
+    if (!modeConfirming || !window.mavlink) {
+      setModeConfirming(null)
+      return
+    }
+    setModeLoading(true)
+    try {
+      await window.mavlink.sendCommand({
+        type: 'SET_MODE',
+        params: { mode: modeConfirming.modeName }
+      })
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setModeLoading(false)
+      setModeConfirming(null)
+    }
   }
 
   // MISSION START 버튼 활성화 조건 — ArduPilot 스타일 게이팅
@@ -145,6 +184,28 @@ export function AvionicsPanel(): React.JSX.Element {
         overflowY: 'auto'
       }}
     >
+      {/* Drag handle */}
+      <div
+        onMouseDown={onDragHandle}
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '14px',
+          marginBottom: '8px',
+          cursor: onDragHandle ? 'grab' : 'default'
+        }}
+      >
+        <div
+          style={{
+            width: '28px',
+            height: '3px',
+            borderRadius: '2px',
+            background: 'rgba(236, 223, 204, 0.25)'
+          }}
+        />
+      </div>
+
       {/* ARM Status */}
       <div
         style={{
@@ -186,7 +247,7 @@ export function AvionicsPanel(): React.JSX.Element {
           <span
             style={{
               fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '13px',
+              fontSize: '10px',
               fontWeight: 700,
               color: armed ? '#ECDFCC' : 'rgba(236, 223, 204, 0.35)',
               letterSpacing: '0.05em',
@@ -198,25 +259,32 @@ export function AvionicsPanel(): React.JSX.Element {
         </div>
       </div>
 
-      {/* RC OVERRIDE Badge — bit 24 set */}
-      {rcOverride && (
+      {/* RC indicator — custom_mode bit 24 (rc_override). ARM STATUS 줄과 동일 레이아웃. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '12px'
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: '9px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            color: 'rgba(236, 223, 204, 0.45)'
+          }}
+        >
+          RC
+        </span>
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: '5px 8px',
-            marginBottom: '10px',
-            background: 'rgba(236, 223, 204, 0.08)',
-            border: `1px solid ${ACCENT}`,
-            borderRadius: '3px',
-            color: ACCENT,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '10px',
-            fontWeight: 700,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase'
+            gap: '6px'
           }}
         >
           <div
@@ -224,13 +292,78 @@ export function AvionicsPanel(): React.JSX.Element {
               width: '6px',
               height: '6px',
               borderRadius: '50%',
-              background: ACCENT,
-              boxShadow: `0 0 8px ${ACCENT}`
+              background: rcLink ? '#ECDFCC' : 'rgba(236, 223, 204, 0.2)',
+              boxShadow: rcLink ? '0 0 8px rgba(236, 223, 204, 0.7)' : 'none',
+              transition: 'all 0.3s ease'
             }}
           />
-          RC OVERRIDE
+          <span
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '10px',
+              fontWeight: 700,
+              color: rcLink ? '#ECDFCC' : 'rgba(236, 223, 204, 0.35)',
+              letterSpacing: '0.05em',
+              transition: 'color 0.3s ease'
+            }}
+          >
+            {rcLink ? 'CONNECTED' : 'STANDBY'}
+          </span>
         </div>
-      )}
+      </div>
+
+      {/* GPS indicator — GPS_RAW_INT fix_type + satellites. ARM STATUS 줄과 동일 레이아웃. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '12px'
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: '9px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            color: 'rgba(236, 223, 204, 0.45)'
+          }}
+        >
+          GPS
+        </span>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <div
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: gps3D ? '#ECDFCC' : 'rgba(236, 223, 204, 0.2)',
+              boxShadow: gps3D ? '0 0 8px rgba(236, 223, 204, 0.7)' : 'none',
+              transition: 'all 0.3s ease'
+            }}
+          />
+          <span
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '10px',
+              fontWeight: 700,
+              color: gps3D ? '#ECDFCC' : 'rgba(236, 223, 204, 0.35)',
+              letterSpacing: '0.05em',
+              transition: 'color 0.3s ease'
+            }}
+          >
+            {gpsLabel}
+          </span>
+        </div>
+      </div>
 
       {/* Flight Mode */}
       <div
@@ -259,17 +392,32 @@ export function AvionicsPanel(): React.JSX.Element {
             fontSize: '18px',
             fontWeight: 700,
             color: '#ECDFCC',
-            letterSpacing: '0.03em'
+            letterSpacing: '0.03em',
+            lineHeight: 1.1
           }}
         >
-          {flightMode}
+          {flightModePrimary}
         </div>
+        {flightModeSub && (
+          <div
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'rgba(236, 223, 204, 0.55)',
+              letterSpacing: '0.08em',
+              marginTop: '2px'
+            }}
+          >
+            ↳ {flightModeSub}
+          </div>
+        )}
         <div
           style={{
             fontFamily: "'Space Grotesk', sans-serif",
             fontSize: '10px',
             color: 'rgba(236, 223, 204, 0.4)',
-            marginTop: '2px'
+            marginTop: '4px'
           }}
         >
           {systemStatus}
@@ -278,9 +426,8 @@ export function AvionicsPanel(): React.JSX.Element {
         <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
           {MODE_ENTRIES.map((entry) => {
             const isActive = flightModeRaw === entry.flightModeRaw
-            // RC override 중에는 AUTO/EMER 진입 차단 (수동 복귀는 허용)
-            const blockedByRcOverride = rcOverride && entry.key !== 'MANUAL'
-            const disabled = isActive || blockedByRcOverride
+            // 모드 전환은 RC/GCS 동등 last-action-wins (모델 Chart1). GCS는 진입 차단 안 함.
+            const disabled = isActive
             return (
               <button
                 key={entry.key}
@@ -289,13 +436,7 @@ export function AvionicsPanel(): React.JSX.Element {
                   handleModeClick(entry)
                 }}
                 disabled={disabled}
-                title={
-                  isActive
-                    ? `Already in ${entry.key}`
-                    : blockedByRcOverride
-                      ? 'RC override active — release sticks first'
-                      : (entry.confirmMessage ?? `Enter ${entry.key}`)
-                }
+                title={isActive ? `Already in ${entry.key}` : (entry.confirmMessage ?? `Enter ${entry.key}`)}
                 style={{
                   flex: 1,
                   fontFamily: "'JetBrains Mono', monospace",
@@ -308,13 +449,9 @@ export function AvionicsPanel(): React.JSX.Element {
                     : '1px solid rgba(236, 223, 204, 0.15)',
                   borderRadius: '3px',
                   background: isActive ? 'rgba(236, 223, 204, 0.12)' : 'rgba(60, 61, 55, 0.3)',
-                  color: isActive
-                    ? '#ECDFCC'
-                    : blockedByRcOverride
-                      ? 'rgba(236, 223, 204, 0.25)'
-                      : 'rgba(236, 223, 204, 0.5)',
+                  color: isActive ? '#ECDFCC' : 'rgba(236, 223, 204, 0.5)',
                   cursor: disabled ? 'not-allowed' : 'pointer',
-                  opacity: blockedByRcOverride ? 0.6 : 1,
+                  opacity: 1,
                   textTransform: 'uppercase',
                   transition: 'all 0.15s ease'
                 }}
@@ -605,6 +742,106 @@ export function AvionicsPanel(): React.JSX.Element {
           </div>
         </div>
       )}
+
+      {/* MODE confirm dialog (MANUAL/EMERGENCY) */}
+      {modeConfirming &&
+        (() => {
+          const isEmer = modeConfirming.key === 'EMER'
+          const accent = isEmer ? '#FF5252' : '#ECDFCC'
+          return (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(24,28,20,0.7)',
+                backdropFilter: 'blur(4px)',
+                zIndex: 100
+              }}
+              onClick={() => !modeLoading && setModeConfirming(null)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: '#1e2218',
+                  border: `1px solid ${isEmer ? accent : 'rgba(236,223,204,0.2)'}`,
+                  borderRadius: '6px',
+                  padding: '14px 18px',
+                  width: '220px',
+                  boxShadow: `0 16px 48px rgba(0,0,0,0.6)${isEmer ? `, 0 0 24px rgba(255,82,82,0.3)` : ''}`
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: '9px',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    color: isEmer ? accent : 'rgba(236,223,204,0.45)',
+                    marginBottom: '6px'
+                  }}
+                >
+                  {isEmer ? '⚠ EMERGENCY' : 'CONFIRM'}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: '#ECDFCC',
+                    marginBottom: '14px',
+                    lineHeight: 1.4
+                  }}
+                >
+                  {modeConfirming.confirmMessage}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => setModeConfirming(null)}
+                    disabled={modeLoading}
+                    style={{
+                      flex: 1,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      padding: '8px',
+                      border: '1px solid rgba(236,223,204,0.15)',
+                      borderRadius: '3px',
+                      background: 'transparent',
+                      color: 'rgba(236,223,204,0.5)',
+                      cursor: modeLoading ? 'not-allowed' : 'pointer',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    onClick={handleModeConfirm}
+                    disabled={modeLoading}
+                    style={{
+                      flex: 1,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      padding: '8px',
+                      border: `1px solid ${accent}`,
+                      borderRadius: '3px',
+                      background: isEmer ? 'rgba(255,82,82,0.15)' : 'rgba(236,223,204,0.08)',
+                      color: accent,
+                      cursor: modeLoading ? 'not-allowed' : 'pointer',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    {modeLoading ? '...' : isEmer ? 'EMERGENCY' : 'EXECUTE'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
       {/* MISSION START confirm dialog */}
       {missionConfirmOpen && (

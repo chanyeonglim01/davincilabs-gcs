@@ -95,10 +95,10 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const [visible, setVisible] = useState<VisibleState>({
     roll: true,
     pitch: true,
-    yaw: false,
+    yaw: true,
     rollrate: true,
     pitchrate: true,
-    yawrate: false,
+    yawrate: true,
     gndspd: true,
     airspd: true
   })

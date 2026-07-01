@@ -19,9 +19,7 @@ function VsiIndicator({ vspeed, size = 140 }: { vspeed: number; size?: number })
   const clamped = Math.max(-maxVs, Math.min(maxVs, vspeed))
   const svgNeedleAngle = 180 + (clamped / maxVs) * 180
 
-  const isClimb = vspeed > 0.05
-  const isDescent = vspeed < -0.05
-  const needleColor = isClimb ? '#6db56d' : isDescent ? '#c46060' : '#ECDFCC'
+  const needleColor = '#ECDFCC'
 
   // polarToXY: 0° = top (12 o'clock), clockwise
   const polarToXY = (angleDeg: number, radius: number) => {
@@ -410,6 +408,7 @@ export function InstrumentsPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
   const heading = telemetry?.heading ?? 0
   const airspeed = telemetry?.velocity?.airspeed ?? 0
+  // NED 좌표: relative_alt 음수 = 위로 상승. raw 값 전달 (게이지 내부에서 needle/digital 처리)
   const altitude = telemetry?.position?.relative_alt ?? 0
   const vspeed = -(telemetry?.velocity?.vz ?? 0)
 

@@ -28,7 +28,7 @@ export function addLog(level: LogEntry['level'], msg: string) {
 export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([...globalLogs])
   const [size, setSize] = useState({ width: 320, height: 200 })
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const resizing = useRef(false)
   const resizeStart = useRef({ x: 0, y: 0, w: 320, h: 200 })
 
@@ -46,7 +46,10 @@ export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
   }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // scrollIntoView는 조상 스크롤 컨테이너 전체를 스크롤시켜 화면이 밀리므로
+    // 로그 리스트 요소 자체만 스크롤한다.
+    const el = listRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [logs])
 
   useEffect(() => {
@@ -166,6 +169,7 @@ export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
       {!collapsed && (
         <>
           <div
+            ref={listRef}
             style={{
               height: `${size.height}px`,
               overflowY: 'auto',
@@ -229,7 +233,6 @@ export function LogPanel({ onDragHandle, collapsed, onToggle }: Props) {
                 </span>
               </div>
             ))}
-            <div ref={bottomRef} />
           </div>
 
           {/* Resize handle */}
