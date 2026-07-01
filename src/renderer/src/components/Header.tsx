@@ -159,11 +159,22 @@ export function Header({ currentView, onViewChange }: HeaderProps): React.JSX.El
     }
 
     if (mode === 'com') {
-      // Serial transport not yet implemented — surface a clear message.
-      const target = comPort ? `${comPort} @ ${baudrate} baud` : 'serial device'
-      window.alert(
-        `Serial transport not implemented yet (selected ${target}). ` + `Use UDP for now.`
-      )
+      // 시리얼 트랜스포트 (텔레메트리 라디오 COM 포트)
+      if (!comPort) {
+        window.alert('시리얼 포트를 먼저 선택하세요.')
+        return
+      }
+      setConnecting(true)
+      try {
+        const result = await window.mavlink?.connectSerial(comPort, baudrate)
+        if (result && !result.success) {
+          console.error('[Header] serial connect failed:', result.error)
+        }
+      } catch (e) {
+        console.error('[Header] serial connect error:', e)
+      } finally {
+        setConnecting(false)
+      }
       return
     }
 

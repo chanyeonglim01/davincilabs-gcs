@@ -35,7 +35,7 @@ import {
 import { registerSerialHandlers } from './ipc/serial'
 
 // Store
-import { getConnectionConfig, getWindowBounds, setWindowBounds } from './store'
+import { getWindowBounds, setWindowBounds } from './store'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -176,16 +176,6 @@ function initializeMavlink(): void {
       mainWindow.webContents.send('connection-status', connection.getStatus())
     }
   })
-
-  // Auto-connect in Simulink mode
-  const config = getConnectionConfig()
-  if (config.mode === 'simulink') {
-    setTimeout(() => {
-      connection.connect(config).catch((err) => {
-        console.error('[Main] Auto-connect failed:', err)
-      })
-    }, 1000) // Wait 1s for window to load
-  }
 }
 
 app.whenReady().then(() => {

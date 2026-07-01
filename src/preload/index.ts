@@ -17,7 +17,9 @@ import type {
   LogEntry,
   SerialPortInfo,
   MotorTestPayload,
-  MotorTestResult
+  MotorTestResult,
+  CtrlSurfTestPayload,
+  CtrlSurfTestResult
 } from '../renderer/src/types'
 
 // Custom MAVLink API for renderer
@@ -30,11 +32,15 @@ const mavlinkAPI = {
     port: number
   }): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('mavlink:reconnect', config),
+  connectSerial: (path: string, baud: number): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('mavlink:connect-serial', { path, baud }),
   disconnect: (): Promise<void> => ipcRenderer.invoke('mavlink:disconnect'),
   sendCommand: (command: Command): Promise<CommandResult> =>
     ipcRenderer.invoke('mavlink:send-command', command),
   motorTest: (payload: MotorTestPayload): Promise<MotorTestResult> =>
     ipcRenderer.invoke('mavlink:motor-test', payload),
+  ctrlSurfTest: (payload: CtrlSurfTestPayload): Promise<CtrlSurfTestResult> =>
+    ipcRenderer.invoke('mavlink:ctrl-surf-test', payload),
   requestParams: (): Promise<void> => ipcRenderer.invoke('mavlink:request-params'),
   setParam: (param: ParamEntry): Promise<void> => ipcRenderer.invoke('mavlink:set-param', param),
   getConnectionStatus: (): Promise<ConnectionStatus> =>

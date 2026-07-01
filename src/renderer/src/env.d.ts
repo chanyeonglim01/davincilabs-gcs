@@ -12,7 +12,9 @@ import type {
   HomePosition,
   SerialPortInfo,
   MotorTestPayload,
-  MotorTestResult
+  MotorTestResult,
+  CtrlSurfTestPayload,
+  CtrlSurfTestResult
 } from './types'
 
 declare global {
@@ -24,9 +26,11 @@ declare global {
         host: string
         port: number
       }): Promise<{ success: boolean; error?: string }>
+      connectSerial(path: string, baud: number): Promise<{ success: boolean; error?: string }>
       disconnect(): Promise<void>
       sendCommand(command: Command): Promise<CommandResult>
       motorTest(payload: MotorTestPayload): Promise<MotorTestResult>
+      ctrlSurfTest(payload: CtrlSurfTestPayload): Promise<CtrlSurfTestResult>
       requestParams(): Promise<void>
       setParam(param: ParamEntry): Promise<void>
       getConnectionStatus(): Promise<ConnectionStatus>

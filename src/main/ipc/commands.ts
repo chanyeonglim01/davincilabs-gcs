@@ -51,6 +51,27 @@ export function registerCommandHandlers(): void {
     }
   )
 
+  // Connect over serial (텔레메트리 라디오 COM 포트)
+  ipcMain.handle(
+    'mavlink:connect-serial',
+    async (_event, { path, baud }: { path: string; baud: number }) => {
+      try {
+        const connection = getMavlinkConnection()
+        if (connection.isConnected) {
+          connection.disconnect()
+          await new Promise<void>((resolve) => setTimeout(resolve, 200))
+        }
+        await connection.connectSerial(path, baud)
+        sendLogMessage('info', `Serial connected ${path} @ ${baud}`)
+        return { success: true }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Serial connect failed'
+        sendLogMessage('error', `Serial connect failed: ${error}`)
+        return { success: false, error }
+      }
+    }
+  )
+
   // Disconnect from MAVLink
   ipcMain.handle('mavlink:disconnect', async (_event) => {
     try {
@@ -152,6 +173,49 @@ export function registerCommandHandlers(): void {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Motor test failed'
         sendLogMessage('error', `Motor test failed: ${message}`)
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // Control surface test (CTRL_SURF_TEST / cmd 31010)
+  // Convenience channel mirroring motor-test: wraps a CTRL_SURF_TEST Command.
+  ipcMain.handle(
+    'mavlink:ctrl-surf-test',
+    async (
+      _event,
+      payload: {
+        enable: boolean
+        source: 'gcs' | 'rc'
+        dA: number
+        dE: number
+        dR: number
+      }
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const connection = getMavlinkConnection()
+        if (!connection.isConnected) {
+          return { success: false, error: 'Not connected to vehicle' }
+        }
+
+        const cmd: Command = {
+          type: 'CTRL_SURF_TEST',
+          params: {
+            enable: payload.enable,
+            source: payload.source,
+            dA: payload.dA,
+            dE: payload.dE,
+            dR: payload.dR
+          }
+        }
+
+        const buffer = commandToBuffer(cmd)
+        connection.sendMessage(buffer)
+        sendLogMessage('info', `Command sent: ${getCommandDescription(cmd)}`)
+        return { success: true }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Control surface test failed'
+        sendLogMessage('error', `Control surface test failed: ${message}`)
         return { success: false, error: message }
       }
     }

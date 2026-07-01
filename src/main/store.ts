@@ -22,8 +22,8 @@ export const store = new Store<StoreSchema>({
     connection: {
       mode: 'simulink',
       host: '127.0.0.1',
-      port: 14550, // GCS listens here (Simulink sends to 14550)
-      remotePort: 14551, // GCS sends here (Simulink listens on 14551)
+      port: 14560, // GCS listens here (Simulink sends to 14560) — 14550 좀비 SITL 회피
+      remotePort: 14561, // GCS sends here (Simulink listens on 14561)
       sysid: 1,
       compid: 1
     },
