@@ -6,7 +6,7 @@ interface Props {
   onToggle: () => void
 }
 
-const OK_GREEN = '#A5D6A7'
+const ACCENT = '#ECDFCC'
 const WARN_AMBER = '#f5c842'
 const DIM = 'rgba(236, 223, 204, 0.3)'
 
@@ -135,8 +135,8 @@ export function KetiPanel({ onDragHandle, collapsed, onToggle }: Props) {
               width: '6px',
               height: '6px',
               borderRadius: '50%',
-              background: !connected ? DIM : valid ? WARN_AMBER : OK_GREEN,
-              boxShadow: !connected ? 'none' : valid ? 'none' : `0 0 6px ${OK_GREEN}`
+              background: !connected ? DIM : valid ? WARN_AMBER : ACCENT,
+              boxShadow: !connected ? 'none' : valid ? 'none' : '0 0 6px rgba(236, 223, 204, 0.7)'
             }}
             title={!connected ? 'NO LINK' : valid ? 'OBSTACLE' : 'CONNECTED'}
           />
@@ -148,40 +148,6 @@ export function KetiPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
       {!collapsed && (
         <div>
-          {/* Link status — CONNECTED when KETI_OBSTACLE is being received */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 10px',
-              borderBottom: '1px solid rgba(236, 223, 204, 0.08)'
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "'Space Grotesk', sans-serif",
-                fontSize: '9px',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.12em',
-                color: 'rgba(236, 223, 204, 0.45)'
-              }}
-            >
-              LINK
-            </span>
-            <span
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '10px',
-                fontWeight: 700,
-                color: connected ? OK_GREEN : DIM,
-                letterSpacing: '0.05em'
-              }}
-            >
-              {connected ? 'CONNECTED' : 'NO LINK'}
-            </span>
-          </div>
           {/* Object count */}
           <div
             style={{

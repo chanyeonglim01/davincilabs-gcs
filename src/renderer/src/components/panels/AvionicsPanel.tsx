@@ -105,7 +105,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
   const lihaiConnected = lihaiRxMs > 0 && now - lihaiRxMs < LINK_STALE_MS
   const lihaiErrors = telemetry?.status?.lihaiErrors
   const lihaiHasError = lihaiConnected && lihaiErrors ? Object.values(lihaiErrors).some((v) => v !== 0) : false
-  const lihaiColor = !lihaiConnected ? 'rgba(236, 223, 204, 0.2)' : lihaiHasError ? '#f5c842' : ACCENT
+  const lihaiColor = !lihaiConnected ? 'rgba(236, 223, 204, 0.2)' : lihaiHasError ? '#f5c842' : '#ECDFCC'
   const lihaiLabel = !lihaiConnected ? 'NO LINK' : lihaiHasError ? 'ERROR' : 'CONNECTED'
 
   // KETI — 수신 여부 + 전방 장애물 (상세는 KetiPanel)
@@ -114,7 +114,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
   const ketiValid = telemetry?.status?.ketiValid ?? false
   const ketiDistance = telemetry?.status?.ketiDistance ?? 0
   const ketiObstacle = ketiConnected && ketiValid && ketiDistance > 0
-  const ketiColor = !ketiConnected ? 'rgba(236, 223, 204, 0.2)' : ketiObstacle ? '#f5c842' : ACCENT
+  const ketiColor = !ketiConnected ? 'rgba(236, 223, 204, 0.2)' : ketiObstacle ? '#f5c842' : '#ECDFCC'
   const ketiLabel = !ketiConnected ? 'NO LINK' : ketiObstacle ? `OBST ${ketiDistance.toFixed(1)}m` : 'CONNECTED'
   const systemStatus = telemetry?.status?.systemStatus ?? '--'
   const linkState = connection?.linkState ?? 'DISCONNECTED'
@@ -482,7 +482,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: '10px',
               fontWeight: 700,
-              color: ketiConnected ? (ketiObstacle ? '#f5c842' : ACCENT) : 'rgba(236, 223, 204, 0.35)',
+              color: ketiConnected ? (ketiObstacle ? '#f5c842' : '#ECDFCC') : 'rgba(236, 223, 204, 0.35)',
               letterSpacing: '0.05em',
               transition: 'color 0.3s ease'
             }}

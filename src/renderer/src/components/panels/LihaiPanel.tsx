@@ -6,11 +6,10 @@ interface Props {
   onToggle: () => void
 }
 
-// LogPanel severity palette — error red / warn amber. OK uses design-system accent.
+// LogPanel severity palette — error red / warn amber. OK/connected uses design-system accent (cream).
 const ERR_RED = '#ff5555'
 const WARN_AMBER = '#f5c842'
 const ACCENT = '#ECDFCC'
-const OK_GREEN = '#A5D6A7'
 
 type LihaiErrorKey = 'bat' | 'gps' | 'imu' | 'baro' | 'rc' | 'angle' | 'pos'
 
@@ -131,8 +130,8 @@ export function LihaiPanel({ onDragHandle, collapsed, onToggle }: Props) {
               width: '6px',
               height: '6px',
               borderRadius: '50%',
-              background: !connected ? 'rgba(236, 223, 204, 0.25)' : hasError ? WARN_AMBER : OK_GREEN,
-              boxShadow: !connected ? 'none' : hasError ? 'none' : `0 0 6px ${OK_GREEN}`
+              background: !connected ? 'rgba(236, 223, 204, 0.25)' : hasError ? WARN_AMBER : ACCENT,
+              boxShadow: !connected ? 'none' : hasError ? 'none' : '0 0 6px rgba(236, 223, 204, 0.7)'
             }}
             title={!connected ? 'NO LINK' : hasError ? 'ERROR' : 'OK'}
           />
@@ -144,12 +143,6 @@ export function LihaiPanel({ onDragHandle, collapsed, onToggle }: Props) {
 
       {!collapsed && (
         <div>
-          {/* Link status — CONNECTED when LIHAI_STATUS is being received */}
-          <FlagRow
-            label="LINK"
-            state={connected ? 'CONNECTED' : 'NO LINK'}
-            color={connected ? OK_GREEN : 'rgba(236, 223, 204, 0.3)'}
-          />
           {/* Subsystem error flags */}
           {FLAGS.map((flag) => {
             const val = errors ? errors[flag.key] : undefined
