@@ -201,6 +201,9 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
 
     const { lat, lon, relative_alt } = telemetry.position
     const heading = telemetry.heading
+    // FCC(X7/DYNAMICS)는 relative_alt를 NED-down(음수=위)로 보냄. Cesium height는 양수=위이므로 부호 반전.
+    // (숫자 패널 TelemetryPanel/AltimeterIndicator도 동일하게 -relative_alt 사용 → 앱 전체 규약 통일)
+    const altUp = -relative_alt
 
     if (lat === 0 && lon === 0) return
 
@@ -215,7 +218,7 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
       prevHeadingRef.current = heading
       accHeadingRef.current += delta
     }
-    const position = Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
+    const position = Cesium.Cartesian3.fromDegrees(lon, lat, altUp)
     entityRef.current.position = new Cesium.ConstantPositionProperty(position)
     entityRef.current.orientation = new Cesium.ConstantProperty(
       computeDroneOrientation(
@@ -227,7 +230,7 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     )
     if (entityRef.current.label) {
       entityRef.current.label.show = new Cesium.ConstantProperty(true)
-      entityRef.current.label.text = new Cesium.ConstantProperty(`ALT: ${relative_alt.toFixed(0)}m`)
+      entityRef.current.label.text = new Cesium.ConstantProperty(`ALT: ${altUp.toFixed(0)}m`)
     }
 
     if (!hasFlownRef.current) {
@@ -255,7 +258,8 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     const positions = history
       .filter((t) => t.position.lat !== 0 && t.position.lon !== 0)
       .map((t) =>
-        Cesium.Cartesian3.fromDegrees(t.position.lon, t.position.lat, t.position.relative_alt)
+        // NED-down(음수=위) → Cesium 양수=위 부호 반전 (드론 위치와 동일 규약)
+        Cesium.Cartesian3.fromDegrees(t.position.lon, t.position.lat, -t.position.relative_alt)
       )
 
     if (positions.length > 1) {
