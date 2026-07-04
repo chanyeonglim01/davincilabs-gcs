@@ -91,6 +91,7 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
       if (!containerRef.current || viewerRef.current) return
 
       let removeDepthPatch: (() => void) | undefined
+      let resizeTimer: ReturnType<typeof setTimeout> | undefined
 
       try {
         Cesium.Ion.defaultAccessToken =
@@ -108,7 +109,9 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
           infoBox: false,
           selectionIndicator: false,
           shadows: false,
-          shouldAnimate: true,
+          shouldAnimate: false,
+          requestRenderMode: true,
+          maximumRenderTimeChange: Infinity,
           terrainProvider: new Cesium.EllipsoidTerrainProvider(),
           baseLayer: new Cesium.ImageryLayer(
             new Cesium.UrlTemplateImageryProvider({
@@ -124,15 +127,9 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
           .then((terrain) => {
             if (viewerRef.current) {
               viewerRef.current.terrainProvider = terrain
+              viewerRef.current.scene.requestRender()
               setTerrainLoaded(true)
             }
-          })
-          .catch(() => {})
-
-        // OSM Buildings (3D 건물)
-        Cesium.Cesium3DTileset.fromIonAssetId(96188)
-          .then((tileset) => {
-            if (viewerRef.current) viewerRef.current.scene.primitives.add(tileset)
           })
           .catch(() => {})
 
@@ -180,7 +177,8 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
           }
         })
 
-        setTimeout(() => {
+        resizeTimer = setTimeout(() => {
+          if (viewer.isDestroyed()) return
           viewer.forceResize()
           viewer.scene.requestRender()
         }, 300)
@@ -189,6 +187,7 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
       }
 
       return () => {
+        if (resizeTimer) clearTimeout(resizeTimer)
         removeDepthPatch?.()
         viewerRef.current?.destroy()
         viewerRef.current = null
@@ -231,16 +230,18 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
 
       if (!hasFlownRef.current) {
         hasFlownRef.current = true
-        viewer.camera.flyTo({
+        // requestRenderMode에서 애니메이션 카메라(flyTo)는 렌더 펌프 없이 멈추므로 즉시 setView
+        viewer.camera.setView({
           destination: Cesium.Cartesian3.fromDegrees(lon, lat, 1500),
           orientation: {
             heading: Cesium.Math.toRadians(0),
             pitch: Cesium.Math.toRadians(-89.9),
             roll: 0.0
-          },
-          duration: 1.5
+          }
         })
       }
+
+      viewer.scene.requestRender()
     }, [telemetry])
 
     // ── 카메라 컨트롤 ON/OFF 헬퍼 ─────────────────────────────────────────────
@@ -343,6 +344,8 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
             )
           path.polyline.positions = new Cesium.ConstantProperty(positions)
         }
+
+        viewer.scene.requestRender()
       }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
 
       // ── LEFT_UP: 드래그 끝 → 위치 확정 ─────────────────────────────────────
@@ -501,6 +504,8 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
         })
         wpEntityIdsRef.current.push(pathId)
       }
+
+      viewer.scene.requestRender()
     }, [waypoints, selectedUid])
 
     // ── Terrain-corrected stick/path positions ────────────────────────────────
@@ -540,6 +545,8 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
               })
             )
           }
+
+          viewerRef.current!.scene.requestRender()
         })
         .catch(() => {})
 

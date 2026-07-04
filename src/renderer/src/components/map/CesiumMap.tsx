@@ -69,6 +69,8 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
   const hasFlownRef = useRef(false)
   const prevHeadingRef = useRef<number | null>(null)
   const accHeadingRef = useRef(0)
+  const pathEntityRef = useRef<Cesium.Entity | null>(null)
+  const lastTrailMsRef = useRef(0)
   const [error, setError] = useState<string | null>(null)
 
   const telemetry = useTelemetryStore((state) => state.telemetry)
@@ -80,6 +82,7 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
 
     const container = containerRef.current
     let removeDepthPatch: (() => void) | undefined
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined
 
     try {
       Cesium.Ion.defaultAccessToken =
@@ -97,7 +100,9 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         infoBox: false,
         selectionIndicator: false,
         shadows: false,
-        shouldAnimate: true,
+        shouldAnimate: false,
+        requestRenderMode: true,
+        maximumRenderTimeChange: Infinity,
         terrainProvider: new Cesium.EllipsoidTerrainProvider(),
         baseLayer: new Cesium.ImageryLayer(
           new Cesium.UrlTemplateImageryProvider({
@@ -110,14 +115,10 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
 
       Cesium.CesiumTerrainProvider.fromIonAssetId(1, { requestVertexNormals: false })
         .then((terrain) => {
-          if (viewerRef.current) viewerRef.current.terrainProvider = terrain
-        })
-        .catch(() => {})
-
-      // OSM Buildings (3D 건물)
-      Cesium.Cesium3DTileset.fromIonAssetId(96188)
-        .then((tileset) => {
-          if (viewerRef.current) viewerRef.current.scene.primitives.add(tileset)
+          if (viewerRef.current) {
+            viewerRef.current.terrainProvider = terrain
+            viewerRef.current.scene.requestRender()
+          }
         })
         .catch(() => {})
 
@@ -178,7 +179,8 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         }
       })
 
-      setTimeout(() => {
+      resizeTimer = setTimeout(() => {
+        if (viewer.isDestroyed()) return
         viewer.forceResize()
         viewer.scene.requestRender()
       }, 300)
@@ -189,9 +191,12 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     }
 
     return () => {
+      if (resizeTimer) clearTimeout(resizeTimer)
       removeDepthPatch?.()
       viewerRef.current?.destroy()
       viewerRef.current = null
+      pathEntityRef.current = null
+      lastTrailMsRef.current = 0
     }
   }, [])
 
@@ -235,25 +240,29 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
 
     if (!hasFlownRef.current) {
       hasFlownRef.current = true
-      viewerRef.current.camera.flyTo({
+      // requestRenderMode에서는 애니메이션 카메라(flyTo)가 렌더 펌프 없이 멈추므로 즉시 setView로 배치
+      viewerRef.current.camera.setView({
         destination: Cesium.Cartesian3.fromDegrees(lon, lat, 2500),
         orientation: {
           heading: Cesium.Math.toRadians(0),
           pitch: Cesium.Math.toRadians(-89.9),
           roll: 0.0
-        },
-        duration: 2
+        }
       })
     }
+
+    viewerRef.current.scene.requestRender()
   }, [telemetry])
 
-  // Draw path trail
+  // Draw path trail — entity 1회 생성 후 positions만 5Hz로 갱신 (매 프레임 remove/add GPU churn 방지)
   useEffect(() => {
-    if (!viewerRef.current || history.length < 2) return
-
     const viewer = viewerRef.current
-    const oldPath = viewer.entities.getById('path')
-    if (oldPath) viewer.entities.remove(oldPath)
+    if (!viewer || history.length < 2) return
+
+    // 5Hz(200ms) 스로틀
+    const now = performance.now()
+    if (now - lastTrailMsRef.current < 200) return
+    lastTrailMsRef.current = now
 
     const positions = history
       .filter((t) => t.position.lat !== 0 && t.position.lon !== 0)
@@ -261,13 +270,14 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
         // NED-down(음수=위) → Cesium 양수=위 부호 반전 (드론 위치와 동일 규약)
         Cesium.Cartesian3.fromDegrees(t.position.lon, t.position.lat, -t.position.relative_alt)
       )
+    if (positions.length < 2) return
 
-    if (positions.length > 1) {
-      viewer.entities.add({
+    if (!pathEntityRef.current) {
+      pathEntityRef.current = viewer.entities.add({
         id: 'path',
         name: 'Flight Path',
         polyline: {
-          positions: positions,
+          positions: new Cesium.ConstantProperty(positions),
           width: 3,
           material: new Cesium.PolylineGlowMaterialProperty({
             glowPower: 0.2,
@@ -276,7 +286,10 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
           clampToGround: false
         }
       })
+    } else if (pathEntityRef.current.polyline) {
+      pathEntityRef.current.polyline.positions = new Cesium.ConstantProperty(positions)
     }
+    viewer.scene.requestRender()
   }, [history])
 
   // Mission waypoint overlay
@@ -297,7 +310,11 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     })
     toRemove.forEach((e) => viewer.entities.remove(e))
 
-    if (waypoints.length === 0) return
+    if (waypoints.length === 0) {
+      // 미션 클리어 시에도 지워진 오버레이가 화면에서 사라지도록 렌더 요청 (requestRenderMode)
+      viewer.scene.requestRender()
+      return
+    }
 
     // Filter waypoints with valid coordinates for polyline
     const navPoints = waypoints.filter((w) => !(w.lat === 0 && w.lon === 0))
@@ -373,6 +390,8 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
           : undefined
       })
     })
+
+    viewer.scene.requestRender()
   }, [waypoints])
 
   if (error) {
