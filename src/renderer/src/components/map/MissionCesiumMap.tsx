@@ -217,7 +217,8 @@ export const MissionCesiumMap = forwardRef<MissionCesiumMapHandle, MissionCesium
         accHeadingRef.current += delta
       }
 
-      const position = Cesium.Cartesian3.fromDegrees(lon, lat, relative_alt)
+      // 보드(실비행 텔메)는 relative_alt를 NED로 보냄(위=음수). Cesium height는 양수=위라 부호 반전 (CesiumMap과 동일 규약).
+      const position = Cesium.Cartesian3.fromDegrees(lon, lat, -relative_alt)
       entity.position = new Cesium.ConstantPositionProperty(position)
       entity.orientation = new Cesium.ConstantProperty(
         computeDroneOrientation(
