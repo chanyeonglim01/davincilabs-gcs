@@ -254,14 +254,14 @@ export function CesiumMap({ initialCenter }: CesiumMapProps): React.ReactElement
     viewerRef.current.scene.requestRender()
   }, [telemetry])
 
-  // Draw path trail — entity 1회 생성 후 positions만 5Hz로 갱신 (매 프레임 remove/add GPU churn 방지)
+  // Draw path trail — entity 1회 생성 후 positions만 10Hz로 갱신 (매 프레임 remove/add GPU churn 방지)
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || history.length < 2) return
 
-    // 5Hz(200ms) 스로틀
+    // 10Hz(100ms) 스로틀 — 보드 위치 텔레메트리(GLOBAL_POSITION 10Hz)와 동일 상한 (그 이상은 새 위치점 없음)
     const now = performance.now()
-    if (now - lastTrailMsRef.current < 200) return
+    if (now - lastTrailMsRef.current < 100) return
     lastTrailMsRef.current = now
 
     const positions = history
