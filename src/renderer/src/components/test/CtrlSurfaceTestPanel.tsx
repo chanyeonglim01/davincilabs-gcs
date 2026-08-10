@@ -41,9 +41,10 @@ interface EngagedState {
 }
 
 export function CtrlSurfaceTestPanel(): React.JSX.Element {
-  const { telemetry, connection } = useTelemetryStore()
-  const isArmed = telemetry?.status.armed ?? false
-  const isLinked = connection.linkState === 'LINKED'
+  // Both are booleans that change rarely; selecting them individually keeps this
+  // panel out of the 30 Hz telemetry re-render path.
+  const isArmed = useTelemetryStore((state) => state.telemetry?.status.armed ?? false)
+  const isLinked = useTelemetryStore((state) => state.connection.linkState === 'LINKED')
 
   const [source, setSource] = useState<CtrlSurfSource>('gcs')
   const [defl, setDefl] = useState<{ dA: number; dE: number; dR: number }>({ dA: 0, dE: 0, dR: 0 })

@@ -5,5 +5,18 @@ import './assets/main.css'
 
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { installGlobalErrorReporters, installPerformanceTimelineGuard } from './lib/errorReporting'
 
-createRoot(document.getElementById('root')!).render(<App />)
+// Catch failures that throw outside React's render phase (async callbacks,
+// Cesium/Leaflet render loops, rejected promises, lost WebGL contexts).
+installGlobalErrorReporters()
+
+// Keep React's dev-build performance.measure() output from filling the renderer.
+installPerformanceTimelineGuard()
+
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+)

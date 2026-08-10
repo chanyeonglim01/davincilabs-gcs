@@ -47,9 +47,10 @@ function motorListLabel(motors: number[]): string {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 export function MotorTestPanel(): React.JSX.Element {
-  const { telemetry, connection } = useTelemetryStore()
-  const isArmed = telemetry?.status.armed ?? false
-  const isLinked = connection.linkState === 'LINKED'
+  // Both are booleans that change rarely; selecting them individually keeps this
+  // panel out of the 30 Hz telemetry re-render path.
+  const isArmed = useTelemetryStore((state) => state.telemetry?.status.armed ?? false)
+  const isLinked = useTelemetryStore((state) => state.connection.linkState === 'LINKED')
 
   const [selected, setSelected] = useState<Set<number>>(() => new Set([1]))
   const [throttle, setThrottle] = useState<number>(20)

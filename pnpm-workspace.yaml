@@ -1,2 +1,12 @@
-packages:
-  - '.'
+allowBuilds:
+  '@serialport/bindings-cpp': true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  protobufjs: true
+onlyBuiltDependencies:
+  - '@serialport/bindings-cpp'
+  - electron
+  - electron-winstaller
+  - esbuild
+  - protobufjs

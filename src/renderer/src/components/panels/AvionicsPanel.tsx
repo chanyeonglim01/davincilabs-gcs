@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import { useMissionStore } from '@renderer/store/missionStore'
 import { HorizonIndicator } from './HorizonIndicator'
@@ -81,47 +82,89 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
     }
   }
 
-  const { telemetry, connection } = useTelemetryStore()
   const waypoints = useMissionStore((s) => s.waypoints)
 
-  const armed = telemetry?.status?.armed ?? false
-  const flightModePrimary = telemetry?.status?.flightModePrimary ?? 'UNKNOWN'
-  const flightModeSub = telemetry?.status?.flightModeSub ?? ''
-  const flightModeRaw = telemetry?.status?.flightModeRaw ?? -1
-  const subState = telemetry?.status?.subState ?? 0
-  const rcOverride = telemetry?.status?.rcOverride ?? false
-  const rcLink = telemetry?.status?.rcLink ?? false
-  const gpsFix = telemetry?.status?.gpsFix ?? 0
-  const satellites = telemetry?.status?.satellites ?? 0
+  // Narrowed to the values this panel actually draws. Subscribing to the whole
+  // store re-rendered it on every 30 Hz telemetry frame even when nothing here
+  // changed; the flags below are almost all discrete. lihaiErrors is collapsed
+  // to a boolean inside the selector because the parser hands out a fresh object
+  // each frame, which would defeat the shallow comparison.
+  const {
+    armed,
+    flightModePrimary,
+    flightModeSub,
+    flightModeRaw,
+    subState,
+    rcOverride,
+    rcLink,
+    gpsFix,
+    satellites,
+    lihaiRxMs,
+    lihaiAnyError,
+    ketiRxMs,
+    ketiValid,
+    ketiDistance,
+    systemStatus,
+    linkState,
+    rollRad,
+    pitchRad,
+    yawRad
+  } = useTelemetryStore(
+    useShallow((state) => {
+      const status = state.telemetry?.status
+      const errors = status?.lihaiErrors
+      return {
+        armed: status?.armed ?? false,
+        flightModePrimary: status?.flightModePrimary ?? 'UNKNOWN',
+        flightModeSub: status?.flightModeSub ?? '',
+        flightModeRaw: status?.flightModeRaw ?? -1,
+        subState: status?.subState ?? 0,
+        rcOverride: status?.rcOverride ?? false,
+        rcLink: status?.rcLink ?? false,
+        gpsFix: status?.gpsFix ?? 0,
+        satellites: status?.satellites ?? 0,
+        lihaiRxMs: status?.lihaiRxMs ?? 0,
+        lihaiAnyError: errors ? Object.values(errors).some((v) => v !== 0) : false,
+        ketiRxMs: status?.ketiRxMs ?? 0,
+        ketiValid: status?.ketiValid ?? false,
+        ketiDistance: status?.ketiDistance ?? 0,
+        systemStatus: status?.systemStatus ?? '--',
+        linkState: state.connection?.linkState ?? 'DISCONNECTED',
+        rollRad: state.telemetry?.attitude?.roll ?? 0,
+        pitchRad: state.telemetry?.attitude?.pitch ?? 0,
+        yawRad: state.telemetry?.attitude?.yaw ?? 0
+      }
+    })
+  )
+
   const gps3D = gpsFix >= 3
   const gpsLabel = gpsFix >= 3 ? `3D · ${satellites}` : gpsFix === 2 ? `2D · ${satellites}` : 'NO FIX'
 
   // LIHAI / KETI — CONNECTED = 커스텀 메시지를 최근에 수신했는지(신선도). RC와 동일 개념.
-  const now = Date.now()
+  // 신선도는 벽시계 기준이라 텔레메트리가 끊겨 리렌더가 멈춰도 판정이 진행되도록
+  // 자체 틱을 돌린다 (예전에는 30Hz 리렌더에 얹혀 있었다).
+  const [now, setNow] = useState<number>(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(timer)
+  }, [])
   const LINK_STALE_MS = 2000 // FCC가 250ms마다 송신 → 2s 무수신이면 NO LINK
 
   // LIHAI — 수신 여부 + 서브시스템 에러 플래그 (상세는 LihaiPanel)
-  const lihaiRxMs = telemetry?.status?.lihaiRxMs ?? 0
   const lihaiConnected = lihaiRxMs > 0 && now - lihaiRxMs < LINK_STALE_MS
-  const lihaiErrors = telemetry?.status?.lihaiErrors
-  const lihaiHasError = lihaiConnected && lihaiErrors ? Object.values(lihaiErrors).some((v) => v !== 0) : false
+  const lihaiHasError = lihaiConnected && lihaiAnyError
   const lihaiColor = !lihaiConnected ? 'rgba(236, 223, 204, 0.2)' : lihaiHasError ? '#f5c842' : '#ECDFCC'
   const lihaiLabel = !lihaiConnected ? 'NO LINK' : lihaiHasError ? 'ERROR' : 'CONNECTED'
 
   // KETI — 수신 여부 + 전방 장애물 (상세는 KetiPanel)
-  const ketiRxMs = telemetry?.status?.ketiRxMs ?? 0
   const ketiConnected = ketiRxMs > 0 && now - ketiRxMs < LINK_STALE_MS
-  const ketiValid = telemetry?.status?.ketiValid ?? false
-  const ketiDistance = telemetry?.status?.ketiDistance ?? 0
   const ketiObstacle = ketiConnected && ketiValid && ketiDistance > 0
   const ketiColor = !ketiConnected ? 'rgba(236, 223, 204, 0.2)' : ketiObstacle ? '#f5c842' : '#ECDFCC'
   const ketiLabel = !ketiConnected ? 'NO LINK' : ketiObstacle ? `OBST ${ketiDistance.toFixed(1)}m` : 'CONNECTED'
-  const systemStatus = telemetry?.status?.systemStatus ?? '--'
-  const linkState = connection?.linkState ?? 'DISCONNECTED'
 
-  const roll = ((telemetry?.attitude?.roll ?? 0) * 180) / Math.PI
-  const pitch = ((telemetry?.attitude?.pitch ?? 0) * 180) / Math.PI
-  const yawSigned = ((telemetry?.attitude?.yaw ?? 0) * 180) / Math.PI
+  const roll = (rollRad * 180) / Math.PI
+  const pitch = (pitchRad * 180) / Math.PI
+  const yawSigned = (yawRad * 180) / Math.PI
   const yaw = ((yawSigned % 360) + 360) % 360
 
   // Mode 진입 핸들러 — ArduPilot 스타일 분리. confirmMessage 있으면 커스텀 모달.

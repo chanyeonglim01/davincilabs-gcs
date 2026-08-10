@@ -18,7 +18,8 @@ import type {
   MotorTestPayload,
   MotorTestResult,
   CtrlSurfTestPayload,
-  CtrlSurfTestResult
+  CtrlSurfTestResult,
+  RendererErrorReport
 } from '../renderer/src/types'
 
 declare global {
@@ -68,6 +69,9 @@ declare global {
         error?: string
       }>
       listSerialPorts(): Promise<SerialPortInfo[]>
+
+      // Diagnostics (Renderer -> Main, fire-and-forget)
+      reportRendererError(report: RendererErrorReport): void
 
       // Listen (Main -> Renderer, callback)
       // Each returns cleanup function

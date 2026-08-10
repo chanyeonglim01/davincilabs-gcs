@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import { AirspeedIndicator } from './AirspeedIndicator'
 import { AltimeterIndicator } from './AltimeterIndicator'
@@ -404,13 +405,17 @@ function HeadingDial({ heading, size = 140 }: { heading: number; size?: number }
 }
 
 export function InstrumentsPanel({ onDragHandle, collapsed, onToggle }: Props) {
-  const { telemetry } = useTelemetryStore()
-
-  const heading = telemetry?.heading ?? 0
-  const airspeed = telemetry?.velocity?.airspeed ?? 0
-  // NED 좌표: relative_alt 음수 = 위로 상승. raw 값 전달 (게이지 내부에서 needle/digital 처리)
-  const altitude = telemetry?.position?.relative_alt ?? 0
-  const vspeed = -(telemetry?.velocity?.vz ?? 0)
+  // Only the four values the gauges draw — a stationary vehicle then produces no
+  // re-renders at all, instead of thirty a second.
+  const { heading, airspeed, altitude, vspeed } = useTelemetryStore(
+    useShallow((state) => ({
+      heading: state.telemetry?.heading ?? 0,
+      airspeed: state.telemetry?.velocity?.airspeed ?? 0,
+      // NED 좌표: relative_alt 음수 = 위로 상승. raw 값 전달 (게이지 내부에서 needle/digital 처리)
+      altitude: state.telemetry?.position?.relative_alt ?? 0,
+      vspeed: -(state.telemetry?.velocity?.vz ?? 0)
+    }))
+  )
 
   return (
     <div

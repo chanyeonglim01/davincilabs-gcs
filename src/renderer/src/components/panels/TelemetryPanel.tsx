@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
 
 interface Props {
@@ -56,16 +57,24 @@ function DataCell({ label, value, unit }: { label: string; value: string; unit: 
 }
 
 export function TelemetryPanel({ onDragHandle, collapsed, onToggle }: Props) {
-  const { telemetry } = useTelemetryStore()
-
-  const lat = telemetry?.position?.lat?.toFixed(5) ?? '--'
-  const lon = telemetry?.position?.lon?.toFixed(5) ?? '--'
-  // NED 음수 = 위로 상승. UI 는 UP altitude 양수로 표시.
-  const altRaw = telemetry?.position?.relative_alt
-  const alt = altRaw != null ? (-altRaw).toFixed(1) : '--'
-  const gspd = telemetry?.velocity?.groundspeed?.toFixed(1) ?? '--'
-  const aspd = telemetry?.velocity?.airspeed?.toFixed(1) ?? '--'
-  const bat = telemetry?.status?.battery?.remaining?.toFixed(0) ?? '--'
+  // Select the strings that are actually drawn rather than the telemetry object:
+  // the panel then re-renders only when a displayed digit changes, instead of on
+  // every 30 Hz frame.
+  const { lat, lon, alt, gspd, aspd, bat } = useTelemetryStore(
+    useShallow((state) => {
+      const t = state.telemetry
+      // NED 음수 = 위로 상승. UI 는 UP altitude 양수로 표시.
+      const altRaw = t?.position?.relative_alt
+      return {
+        lat: t?.position?.lat?.toFixed(5) ?? '--',
+        lon: t?.position?.lon?.toFixed(5) ?? '--',
+        alt: altRaw != null ? (-altRaw).toFixed(1) : '--',
+        gspd: t?.velocity?.groundspeed?.toFixed(1) ?? '--',
+        aspd: t?.velocity?.airspeed?.toFixed(1) ?? '--',
+        bat: t?.status?.battery?.remaining?.toFixed(0) ?? '--'
+      }
+    })
+  )
 
   return (
     <div

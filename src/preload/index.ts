@@ -19,7 +19,8 @@ import type {
   MotorTestPayload,
   MotorTestResult,
   CtrlSurfTestPayload,
-  CtrlSurfTestResult
+  CtrlSurfTestResult,
+  RendererErrorReport
 } from '../renderer/src/types'
 
 // Custom MAVLink API for renderer
@@ -75,6 +76,11 @@ const mavlinkAPI = {
     error?: string
   }> => ipcRenderer.invoke('mavlink:download-mission'),
   listSerialPorts: (): Promise<SerialPortInfo[]> => ipcRenderer.invoke('serial:list-ports'),
+
+  // Diagnostics (Renderer -> Main, fire-and-forget so a dying renderer still reports)
+  reportRendererError: (report: RendererErrorReport): void => {
+    ipcRenderer.send('app:renderer-error', report)
+  },
 
   // Listen (Main -> Renderer)
   onTelemetryUpdate: (callback: (data: TelemetryData) => void) => {

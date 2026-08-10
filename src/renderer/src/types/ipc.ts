@@ -175,6 +175,21 @@ export interface CtrlSurfTestResult {
   error?: string
 }
 
+// Renderer failure report (app:renderer-error) — written to gcs-crash.log by main
+export type RendererErrorKind =
+  | 'react-render'
+  | 'window-error'
+  | 'unhandled-rejection'
+  | 'webgl-context-lost'
+  | 'perf-timeline' // diagnostic, not a failure
+
+export interface RendererErrorReport {
+  kind: RendererErrorKind
+  message: string
+  stack: string | null
+  source: string | null
+}
+
 // Renderer -> Main (invoke via ipcRenderer.invoke)
 export interface RendererToMainChannels {
   'mavlink:connect': ConnectionConfig
@@ -186,4 +201,5 @@ export interface RendererToMainChannels {
   'mavlink:set-param': ParamEntry
   'mavlink:get-connection-status': ConnectionStatus
   'serial:list-ports': SerialPortInfo[]
+  'app:renderer-error': RendererErrorReport
 }

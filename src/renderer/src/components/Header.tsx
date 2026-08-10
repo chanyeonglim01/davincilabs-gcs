@@ -76,7 +76,9 @@ interface HeaderProps {
 }
 
 export function Header({ currentView, onViewChange }: HeaderProps): React.JSX.Element {
-  const { connection } = useTelemetryStore()
+  // Connection only — subscribing to the whole store would re-render the header
+  // on every 30 Hz telemetry frame.
+  const connection = useTelemetryStore((state) => state.connection)
   const linkState: LinkState = connection.linkState ?? 'DISCONNECTED'
   const isLinked = linkState === 'LINKED'
   const isTransportOpen = isLinked || linkState === 'WAITING_HEARTBEAT' || linkState === 'STALE'

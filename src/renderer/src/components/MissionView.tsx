@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import droneIconSvg from '@renderer/assets/drone_icon.svg'
@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { useMissionStore, ActionKey, Waypoint } from '@renderer/store/missionStore'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { useLivePose } from '@renderer/hooks/useTelemetry'
 import { DesignToolbar } from './mission/DesignToolbar'
 import { SurveyConfigPanel } from './mission/SurveyConfigPanel'
 import { generateSurveyGrid, SurveyGridParams, SurveyGridResult } from '@renderer/lib/surveyGrid'
@@ -220,17 +221,33 @@ const smallInput: React.CSSProperties = {
   outline: 'none'
 }
 
-const TILES: Record<string, { url: string; maxZoom: number; subdomains?: string }> = {
+// ArcGIS World_Imagery's actual cached resolution varies by region — many areas
+// (especially non-major-city flight-test sites) have no tiles past z17, so
+// requesting z18/19 there 404s and leaves a blank gap. maxNativeZoom caps the
+// real tile request and lets Leaflet upscale the last available tile instead,
+// so zooming in on a waypoint never breaks into a blank/white view.
+const TILES: Record<
+  string,
+  { url: string; maxZoom: number; maxNativeZoom?: number; subdomains?: string }
+> = {
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    maxZoom: 19
+    maxZoom: 22,
+    maxNativeZoom: 17
   },
   dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    maxZoom: 20,
+    maxZoom: 22,
+    maxNativeZoom: 19,
     subdomains: 'abcd'
   }
 }
+
+// Any tile that still fails to load (network blip, edge of coverage) falls back
+// to a transparent 1x1 pixel instead of Leaflet's default broken-image glyph —
+// the dark .leaflet-container background (see gcs.css) shows through cleanly.
+const TRANSPARENT_TILE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 
 type TileMode = 'satellite' | 'dark'
 
@@ -262,7 +279,13 @@ export function MissionView() {
     designMode,
     setDesignMode
   } = useMissionStore()
-  const { telemetry } = useTelemetryStore()
+  // This view only renders whether a GPS fix exists; the live position is pushed
+  // straight into Leaflet below. Subscribing to the telemetry object would
+  // re-render this whole editor on every one of the 30 frames a second.
+  const hasFix = useTelemetryStore((state) => {
+    const position = state.telemetry?.position
+    return position !== undefined && (position.lat !== 0 || position.lon !== 0)
+  })
 
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -331,7 +354,9 @@ export function MissionView() {
     })
 
     const tileLayer = L.tileLayer(TILES.satellite.url, {
-      maxZoom: TILES.satellite.maxZoom
+      maxZoom: TILES.satellite.maxZoom,
+      maxNativeZoom: TILES.satellite.maxNativeZoom,
+      errorTileUrl: TRANSPARENT_TILE
     }).addTo(map)
     tileLayerRef.current = tileLayer
 
@@ -384,9 +409,10 @@ export function MissionView() {
   // ── Switch tile layer when tileMode changes ───────────────────────────────────
   useEffect(() => {
     if (!tileLayerRef.current || !mapRef.current) return
-    const { url, maxZoom, subdomains } = TILES[tileMode]
+    const { url, maxZoom, maxNativeZoom, subdomains } = TILES[tileMode]
     tileLayerRef.current.setUrl(url)
     tileLayerRef.current.options.maxZoom = maxZoom
+    tileLayerRef.current.options.maxNativeZoom = maxNativeZoom
     if (subdomains) tileLayerRef.current.options.subdomains = subdomains
     mapRef.current.invalidateSize()
   }, [tileMode])
@@ -446,55 +472,48 @@ export function MissionView() {
   }, [waypoints, tileMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Drone marker: update position + heading (즉시 반영) ─────────────────────
-  useLayoutEffect(() => {
+  useLivePose(({ lat, lon, heading }) => {
     const map = mapRef.current
     const marker = droneMarkerRef.current
-    if (!map || !marker || !telemetry) return
-
-    const { lat, lon } = telemetry.position
+    if (!map || !marker) return
     if (lat === 0 && lon === 0) return
 
     marker.setLatLng(new L.LatLng(lat, lon))
 
-    const raw = telemetry.heading ?? 0
     const el = marker.getElement()
     const rotDiv = el?.firstElementChild as HTMLElement | null
 
     if (prevHeadingRef.current === null) {
-      prevHeadingRef.current = raw
-      accHeadingRef.current = raw
+      prevHeadingRef.current = heading
+      accHeadingRef.current = heading
       if (rotDiv) {
         rotDiv.style.transition = 'none'
-        rotDiv.style.transform = `rotate(${raw}deg)`
+        rotDiv.style.transform = `rotate(${heading}deg)`
       }
-      if (!hasCenteredRef.current) {
-        hasCenteredRef.current = true
-        map.setView(new L.LatLng(lat, lon), Math.max(map.getZoom(), 16))
+    } else {
+      let delta = heading - prevHeadingRef.current
+      if (delta > 180) delta -= 360
+      if (delta < -180) delta += 360
+      prevHeadingRef.current = heading
+      accHeadingRef.current += delta
+
+      if (rotDiv) {
+        rotDiv.style.transition = 'none'
+        rotDiv.style.transform = `rotate(${accHeadingRef.current}deg)`
       }
-      return
-    }
-
-    let delta = raw - prevHeadingRef.current
-    if (delta > 180) delta -= 360
-    if (delta < -180) delta += 360
-    prevHeadingRef.current = raw
-    accHeadingRef.current += delta
-
-    if (rotDiv) {
-      rotDiv.style.transition = 'none'
-      rotDiv.style.transform = `rotate(${accHeadingRef.current}deg)`
     }
 
     if (!hasCenteredRef.current) {
       hasCenteredRef.current = true
       map.setView(new L.LatLng(lat, lon), Math.max(map.getZoom(), 16))
     }
-  }, [telemetry?.position?.lat, telemetry?.position?.lon, telemetry?.heading]) // eslint-disable-line react-hooks/exhaustive-deps
+  })
 
-  const centerOnDrone = () => {
+  const centerOnDrone = (): void => {
     const map = mapRef.current
-    if (!map || !telemetry) return
-    const { lat, lon } = telemetry.position
+    const position = useTelemetryStore.getState().telemetry?.position
+    if (!map || !position) return
+    const { lat, lon } = position
     if (lat === 0 && lon === 0) return
     map.setView(new L.LatLng(lat, lon), Math.max(map.getZoom(), 16))
   }
@@ -935,23 +954,17 @@ export function MissionView() {
         {/* Center on drone */}
         <button
           onClick={centerOnDrone}
-          disabled={!telemetry || (telemetry.position.lat === 0 && telemetry.position.lon === 0)}
+          disabled={!hasFix}
           title="드론 위치로 이동"
           style={{
             fontFamily: mono,
             fontSize: '13px',
             background: 'transparent',
-            border: `1px solid ${telemetry && (telemetry.position.lat !== 0 || telemetry.position.lon !== 0) ? 'rgba(79,195,247,0.4)' : 'rgba(236,223,204,0.1)'}`,
+            border: `1px solid ${hasFix ? 'rgba(79,195,247,0.4)' : 'rgba(236,223,204,0.1)'}`,
             borderRadius: '4px',
-            color:
-              telemetry && (telemetry.position.lat !== 0 || telemetry.position.lon !== 0)
-                ? '#4FC3F7'
-                : 'rgba(236,223,204,0.2)',
+            color: hasFix ? '#4FC3F7' : 'rgba(236,223,204,0.2)',
             padding: '3px 9px',
-            cursor:
-              telemetry && (telemetry.position.lat !== 0 || telemetry.position.lon !== 0)
-                ? 'pointer'
-                : 'default',
+            cursor: hasFix ? 'pointer' : 'default',
             lineHeight: 1
           }}
         >

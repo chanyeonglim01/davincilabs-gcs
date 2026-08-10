@@ -35,6 +35,16 @@ body {
   overflow: hidden;
 }
 
+/* Leaflet's default .leaflet-container background is light grey (#ddd). Once
+   zoomed past a tile provider's actual cached resolution for a given area
+   (ArcGIS World_Imagery coverage varies by region), failed tile requests
+   leave blank gaps that show this default through as a jarring white/grey
+   flash. Match the app's dark theme so any gap reads as background, not a
+   broken map. */
+.leaflet-container {
+  background: var(--color-bg-primary);
+}
+
 .app-container {
   width: 100vw;
   height: 100vh;

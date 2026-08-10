@@ -44,6 +44,8 @@ export type {
   ParamProgress,
   LogLevel,
   LogEntry,
+  RendererErrorKind,
+  RendererErrorReport,
   MainToRendererChannels,
   RendererToMainChannels
 } from './ipc'

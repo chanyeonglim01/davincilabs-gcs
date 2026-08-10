@@ -6,13 +6,32 @@
 import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import icon from '../../resources/icon.png?asset'
+import {
+  initCrashLogging,
+  attachProcessGuards,
+  attachWindowGuards,
+  registerCrashIpc,
+  startMetricsSampler
+} from './crashLog'
 
-// Must be called before app.whenReady() — fixes WebGL GPU process crash on macOS
+// Must be called before app.whenReady().
 app.commandLine.appendSwitch('ignore-gpu-blacklist')
 app.commandLine.appendSwitch('enable-webgl', 'true')
-app.commandLine.appendSwitch('disable-gpu-process-crash-limit')
-app.commandLine.appendSwitch('use-angle', 'metal')
-import icon from '../../resources/icon.png?asset'
+
+// The two switches below were added for a WebGL GPU-process crash on macOS and
+// must stay scoped to it. ANGLE has no Metal backend outside macOS, and
+// disable-gpu-process-crash-limit removes Chromium's fallback to software
+// rendering after repeated GPU crashes — on Windows that turns a recoverable
+// GPU blip into a dead renderer, i.e. the solid-white window.
+if (process.platform === 'darwin') {
+  app.commandLine.appendSwitch('use-angle', 'metal')
+  app.commandLine.appendSwitch('disable-gpu-process-crash-limit')
+}
+
+// Earliest possible — enables native crash dumps and opens
+// <userData>/logs/gcs-crash.log so a white screen is no longer silent.
+initCrashLogging()
 
 // MAVLink connection and parser
 import { getMavlinkConnection } from './mavlink/connection'
@@ -52,6 +71,10 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     title: 'DavinciLabs GCS',
+    // Without this the window paints Chromium's default white when the renderer
+    // dies. Matching the app background keeps a crash visually distinguishable
+    // from a React unmount and removes the alarming white flash.
+    backgroundColor: '#13151A',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -60,6 +83,9 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+
+  // Record renderer death / hangs / failed loads, and auto-reload a dead renderer.
+  attachWindowGuards(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -180,6 +206,12 @@ function initializeMavlink(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.davincilabs.gcs')
+
+  // Diagnostics: GPU/utility process deaths, main-process failures, renderer
+  // error reports, and a 5s memory sampler whose trail is dumped on any crash.
+  attachProcessGuards()
+  registerCrashIpc()
+  startMetricsSampler()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

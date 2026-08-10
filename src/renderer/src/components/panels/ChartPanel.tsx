@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
-import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { useThrottledHistory } from '@renderer/hooks/useTelemetry'
 
 interface Props {
   onDragHandle: (e: React.MouseEvent) => void
@@ -9,6 +9,9 @@ interface Props {
 }
 
 const SERIES_COLORS = ['#FFF1CB', '#C2E2FA', '#B7A3E3'] as const
+
+/** Chart refresh period. Telemetry arrives at 30 Hz; the charts do not need it. */
+const CHART_REFRESH_MS = 200
 
 const CHARTS = [
   {
@@ -85,7 +88,9 @@ function SeriesToggle({
 }
 
 export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
-  const { history } = useTelemetryStore()
+  // Redrawing three Recharts line charts at the 30 Hz telemetry rate is six
+  // times the work of doing it at 5 Hz and looks identical.
+  const history = useThrottledHistory(CHART_REFRESH_MS)
   const [size, setSize] = useState({ width: 320, height: 260 })
   const [chartCollapsed, setChartCollapsed] = useState<Record<string, boolean>>({
     attitude: false,
@@ -142,17 +147,23 @@ export function ChartPanel({ onDragHandle, collapsed, onToggle }: Props) {
     resizeStart.current = { x: e.clientX, y: e.clientY, w: size.width, h: size.height }
   }
 
-  const chartData = history.slice(-60).map((d) => ({
-    t: d.timestamp,
-    roll: parseFloat(((d.attitude.roll * 180) / Math.PI).toFixed(1)),
-    pitch: parseFloat(((d.attitude.pitch * 180) / Math.PI).toFixed(1)),
-    yaw: parseFloat(((d.attitude.yaw * 180) / Math.PI).toFixed(1)),
-    rollrate: parseFloat(((d.attitude.rollspeed * 180) / Math.PI).toFixed(1)),
-    pitchrate: parseFloat(((d.attitude.pitchspeed * 180) / Math.PI).toFixed(1)),
-    yawrate: parseFloat(((d.attitude.yawspeed * 180) / Math.PI).toFixed(1)),
-    gndspd: parseFloat(d.velocity.groundspeed.toFixed(1)),
-    airspd: parseFloat(d.velocity.airspeed.toFixed(1))
-  }))
+  // Rebuilt only when a new history snapshot arrives — not on panel resize or
+  // series toggles, which re-render this component too.
+  const chartData = useMemo(
+    () =>
+      history.slice(-60).map((d) => ({
+        t: d.timestamp,
+        roll: parseFloat(((d.attitude.roll * 180) / Math.PI).toFixed(1)),
+        pitch: parseFloat(((d.attitude.pitch * 180) / Math.PI).toFixed(1)),
+        yaw: parseFloat(((d.attitude.yaw * 180) / Math.PI).toFixed(1)),
+        rollrate: parseFloat(((d.attitude.rollspeed * 180) / Math.PI).toFixed(1)),
+        pitchrate: parseFloat(((d.attitude.pitchspeed * 180) / Math.PI).toFixed(1)),
+        yawrate: parseFloat(((d.attitude.yawspeed * 180) / Math.PI).toFixed(1)),
+        gndspd: parseFloat(d.velocity.groundspeed.toFixed(1)),
+        airspd: parseFloat(d.velocity.airspeed.toFixed(1))
+      })),
+    [history]
+  )
 
   return (
     <div

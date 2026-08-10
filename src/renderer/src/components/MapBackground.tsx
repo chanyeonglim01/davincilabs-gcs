@@ -1,12 +1,24 @@
-import { useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useTelemetryStore } from '@renderer/store/telemetryStore'
+import { useLivePose } from '@renderer/hooks/useTelemetry'
 import { useMissionStore } from '@renderer/store/missionStore'
 import type { ActionKey } from '@renderer/store/missionStore'
 import droneIconSvg from '@renderer/assets/drone_icon.svg'
 
 const CesiumMap = lazy(() => import('./map/CesiumMap').then((m) => ({ default: m.CesiumMap })))
+
+/** The trail is redrawn on a timer rather than per telemetry frame (30 Hz). */
+const TRAIL_REFRESH_MS = 200
+
+/**
+ * Flown-path colour. Orange reads clearly over both satellite imagery and the
+ * dark basemap, and stays distinct from the white mission line. Swap for
+ * '#4FC3F7' (sky blue) if the terrain in use is orange-heavy.
+ */
+const TRAIL_COLOR = '#FF6B1A'
+const TRAIL_WEIGHT = 3
 
 // 128×128 icon: drone body center at (64,64) = anchor point
 // Matches CesiumMap's billboard center → 2D/3D positions align
@@ -25,17 +37,33 @@ const createDroneIcon = (heading: number) =>
     className: ''
   })
 
-const TILES: Record<string, { url: string; maxZoom: number; subdomains?: string }> = {
+// ArcGIS World_Imagery's actual cached resolution varies by region — many areas
+// (especially non-major-city flight-test sites) have no tiles past z17, so
+// requesting z18/19 there 404s and leaves a blank gap. maxNativeZoom caps the
+// real tile request and lets Leaflet upscale the last available tile instead,
+// so zooming in never breaks into a blank/white view.
+const TILES: Record<
+  string,
+  { url: string; maxZoom: number; maxNativeZoom?: number; subdomains?: string }
+> = {
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    maxZoom: 19
+    maxZoom: 22,
+    maxNativeZoom: 17
   },
   dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    maxZoom: 19,
+    maxZoom: 22,
+    maxNativeZoom: 19,
     subdomains: 'abcd'
   }
 }
+
+// Any tile that still fails to load (network blip, edge of coverage) falls back
+// to a transparent 1x1 pixel instead of Leaflet's default broken-image glyph —
+// the dark .leaflet-container background (see gcs.css) shows through cleanly.
+const TRANSPARENT_TILE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 
 const ACTION_COLORS: Record<ActionKey, string> = {
   VTOL_TAKEOFF: '#8B9D6B',
@@ -66,7 +94,9 @@ export function MapBackground() {
     lat: number
     zoom: number
   } | null>(null)
-  const { telemetry, history } = useTelemetryStore()
+  // Live telemetry is consumed imperatively below (Leaflet marker + trail), so it
+  // is read through a subscription instead of a hook — this component does not
+  // need to re-render thirty times a second to move a marker.
   const mapCenterRequestId = useTelemetryStore((s) => s.mapCenterRequestId)
   const { waypoints } = useMissionStore()
 
@@ -92,11 +122,16 @@ export function MapBackground() {
     })
 
     const tileLayer = L.tileLayer(TILES.satellite.url, {
-      maxZoom: TILES.satellite.maxZoom
+      maxZoom: TILES.satellite.maxZoom,
+      maxNativeZoom: TILES.satellite.maxNativeZoom,
+      errorTileUrl: TRANSPARENT_TILE
     }).addTo(map)
 
-    // Force Leaflet to recalculate container size
-    setTimeout(() => map.invalidateSize(), 100)
+    // Force Leaflet to recalculate container size. The handle is cleared on
+    // teardown: a pending invalidateSize() firing after map.remove() throws on
+    // the freed map pane, which is how an unrelated render error in this subtree
+    // used to turn into a second, misleading Leaflet exception.
+    const sizeTimer = setTimeout(() => map.invalidateSize(), 100)
     const marker = L.marker([37.5665, 126.978], { icon: createDroneIcon(0) }).addTo(map)
 
     mapInstanceRef.current = map
@@ -104,6 +139,7 @@ export function MapBackground() {
     tileLayerRef.current = tileLayer
 
     return () => {
+      clearTimeout(sizeTimer)
       map.remove()
       mapInstanceRef.current = null
       markerRef.current = null
@@ -114,9 +150,10 @@ export function MapBackground() {
   // Switch tile layer
   useEffect(() => {
     if (!tileLayerRef.current || !mapInstanceRef.current) return
-    const { url, maxZoom, subdomains } = TILES[tileMode]
+    const { url, maxZoom, maxNativeZoom, subdomains } = TILES[tileMode]
     tileLayerRef.current.setUrl(url)
     tileLayerRef.current.options.maxZoom = maxZoom
+    tileLayerRef.current.options.maxNativeZoom = maxNativeZoom
     if (subdomains) tileLayerRef.current.options.subdomains = subdomains
     mapInstanceRef.current.invalidateSize()
   }, [tileMode])
@@ -128,60 +165,54 @@ export function MapBackground() {
     }
   }, [mapMode])
 
-  // Update marker position + heading (즉시 반영, 애니메이션 없음)
-  useLayoutEffect(() => {
-    if (!telemetry || !markerRef.current) return
-    const { lat, lon } = telemetry.position
+  // Update marker position + heading (즉시 반영, 애니메이션 없음).
+  // Also auto-centers on the first valid GPS fix (Mission Planner style).
+  useLivePose(({ lat, lon, heading }) => {
+    const marker = markerRef.current
+    if (!marker) return
     if (lat === 0 && lon === 0) return
-    markerRef.current.setLatLng([lat, lon])
+    marker.setLatLng([lat, lon])
 
-    const raw = telemetry.heading ?? 0
-    const el = markerRef.current.getElement()
+    const el = marker.getElement()
     const rotDiv = el?.firstElementChild as HTMLElement | null
 
     // 첫 텔레메트리
     if (prevHeadingRef.current === null) {
-      prevHeadingRef.current = raw
-      accHeadingRef.current = raw
+      prevHeadingRef.current = heading
+      accHeadingRef.current = heading
       if (rotDiv) {
         rotDiv.style.transition = 'none' // HMR에서 잔여 transition 제거
-        rotDiv.style.transform = `rotate(${raw}deg)`
+        rotDiv.style.transform = `rotate(${heading}deg)`
       }
-      return
+    } else {
+      // 최단 경로 delta
+      let delta = heading - prevHeadingRef.current
+      if (delta > 180) delta -= 360
+      if (delta < -180) delta += 360
+
+      prevHeadingRef.current = heading
+      accHeadingRef.current += delta
+
+      if (rotDiv) {
+        rotDiv.style.transition = 'none'
+        rotDiv.style.transform = `rotate(${accHeadingRef.current}deg)`
+      }
     }
 
-    // 최단 경로 delta
-    const prev = prevHeadingRef.current
-    let delta = raw - prev
-    if (delta > 180) delta -= 360
-    if (delta < -180) delta += 360
-
-    prevHeadingRef.current = raw
-    accHeadingRef.current += delta
-
-    if (rotDiv) {
-      rotDiv.style.transition = 'none'
-      rotDiv.style.transform = `rotate(${accHeadingRef.current}deg)`
-    }
-  }, [telemetry?.position?.lat, telemetry?.position?.lon, telemetry?.heading])
-
-  // Auto-center map on first valid GPS (Mission Planner style)
-  useEffect(() => {
     const map = mapInstanceRef.current
-    if (!map || autoCenteredRef.current) return
-    if (!telemetry) return
-    const { lat, lon } = telemetry.position
-    if (lat === 0 && lon === 0) return
-    map.setView([lat, lon], 18, { animate: false })
-    autoCenteredRef.current = true
-  }, [telemetry?.position?.lat, telemetry?.position?.lon])
+    if (map && !autoCenteredRef.current) {
+      map.setView([lat, lon], 18, { animate: false })
+      autoCenteredRef.current = true
+    }
+  })
 
   // Manual recenter request (TAKEOFF button or explicit user action)
   useEffect(() => {
     if (mapCenterRequestId === 0) return
     const map = mapInstanceRef.current
-    if (!map || !telemetry) return
-    const { lat, lon } = telemetry.position
+    const position = useTelemetryStore.getState().telemetry?.position
+    if (!map || !position) return
+    const { lat, lon } = position
     if (lat === 0 && lon === 0) return
     map.setView([lat, lon], 18, { animate: true })
   }, [mapCenterRequestId])
@@ -238,38 +269,63 @@ export function MapBackground() {
     }
   }, [waypoints])
 
-  // Drone trail (recent flight path)
+  // Drone trail — the whole flight path, from the store's decimated buffer.
+  // The polyline is updated in place on a timer; the previous version destroyed
+  // and rebuilt the layer on every one of the 30 telemetry frames a second,
+  // which was the single most expensive thing this component did.
   useEffect(() => {
-    const map = mapInstanceRef.current
-    if (!map) return
+    // Number of points currently rendered, so a stationary vehicle does not make
+    // Leaflet re-project the whole path five times a second.
+    let drawnCount = -1
 
-    // Clean up existing trail
-    if (droneTrailRef.current) {
-      droneTrailRef.current.remove()
-      droneTrailRef.current = null
+    // The map handle is read inside draw(), not captured here: bailing out once
+    // because the map was not ready yet would leave the trail dead forever.
+    const draw = (): void => {
+      const map = mapInstanceRef.current
+      if (!map) return
+
+      const path = useTelemetryStore.getState().flightPath
+      const trail = droneTrailRef.current
+
+      if (path.length < 2) {
+        trail?.setLatLngs([])
+        drawnCount = path.length
+        return
+      }
+
+      // A trail from a previous map instance is no longer attached — re-create it.
+      const attached = trail !== null && map.hasLayer(trail)
+      if (attached && path.length === drawnCount) return
+      drawnCount = path.length
+
+      const coords: L.LatLngExpression[] = path.map((p) => [p.lat, p.lon])
+
+      if (attached && trail) {
+        trail.setLatLngs(coords)
+        return
+      }
+
+      droneTrailRef.current = L.polyline(coords, {
+        color: TRAIL_COLOR,
+        weight: TRAIL_WEIGHT,
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false
+      }).addTo(map)
     }
 
-    // Use last 150 points
-    const recent = history.slice(-150)
-    const validPoints = recent.filter((p) => p.position.lat !== 0 || p.position.lon !== 0)
-
-    if (validPoints.length < 2) return
-
-    const coords: L.LatLngExpression[] = validPoints.map((p) => [p.position.lat, p.position.lon])
-
-    droneTrailRef.current = L.polyline(coords, {
-      color: 'rgba(236,223,204,0.35)',
-      weight: 2,
-      interactive: false
-    }).addTo(map)
+    draw()
+    const timer = setInterval(draw, TRAIL_REFRESH_MS)
 
     return () => {
+      clearInterval(timer)
       if (droneTrailRef.current) {
         droneTrailRef.current.remove()
         droneTrailRef.current = null
       }
     }
-  }, [history])
+  }, [])
 
   const btnStyle = (active: boolean) => ({
     fontFamily: "'Space Grotesk', sans-serif",
