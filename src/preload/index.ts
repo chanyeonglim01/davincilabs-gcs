@@ -44,6 +44,7 @@ const mavlinkAPI = {
     ipcRenderer.invoke('mavlink:ctrl-surf-test', payload),
   requestParams: (): Promise<void> => ipcRenderer.invoke('mavlink:request-params'),
   setParam: (param: ParamEntry): Promise<void> => ipcRenderer.invoke('mavlink:set-param', param),
+  readParam: (index: number): Promise<void> => ipcRenderer.invoke('mavlink:read-param', index),
   getConnectionStatus: (): Promise<ConnectionStatus> =>
     ipcRenderer.invoke('mavlink:get-connection-status'),
   uploadMission: (

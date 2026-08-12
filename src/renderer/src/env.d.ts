@@ -34,6 +34,7 @@ declare global {
       ctrlSurfTest(payload: CtrlSurfTestPayload): Promise<CtrlSurfTestResult>
       requestParams(): Promise<void>
       setParam(param: ParamEntry): Promise<void>
+      readParam(index: number): Promise<void>
       getConnectionStatus(): Promise<ConnectionStatus>
       uploadMission(
         waypoints: {

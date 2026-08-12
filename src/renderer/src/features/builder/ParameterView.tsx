@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -15,6 +15,9 @@ import {
   MiniMap
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { useBuilderStore } from '@renderer/store/builderStore'
+import { ParamTable } from './ParamTable'
+import { pillStyle, primaryBtn } from '@renderer/components/test/testStyles'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -2194,10 +2197,122 @@ function ParameterFlowCanvas() {
   )
 }
 
-export function ParameterView() {
+const toolbarMono = "'JetBrains Mono', monospace"
+
+export function ParameterView(): React.JSX.Element {
+  const viewMode = useBuilderStore((s) => s.viewMode)
+  const setViewMode = useBuilderStore((s) => s.setViewMode)
+  const isLoading = useBuilderStore((s) => s.isLoading)
+  const progress = useBuilderStore((s) => s.progress)
+
+  // Subscribe once for the life of this view — main process re-broadcasts on
+  // every PARAM_VALUE regardless of who's currently listening, so there's no
+  // "miss the first frames" race to worry about here.
+  useEffect(() => {
+    const offValue = window.mavlink?.onParamValue((p) => {
+      useBuilderStore.getState().setParameter(p)
+    })
+    const offProgress = window.mavlink?.onParamProgress((pr) => {
+      useBuilderStore.getState().setProgress(pr)
+      if (pr.received >= pr.total) useBuilderStore.getState().setLoading(false)
+    })
+    return () => {
+      offValue?.()
+      offProgress?.()
+    }
+  }, [])
+
+  // Board streams at ~20fps (~3s for 58 params) over a serial link that can
+  // drop frames. If progress stalls short of total, re-request just the
+  // missing indices instead of a full re-download.
+  useEffect(() => {
+    if (!progress || progress.received >= progress.total) return
+    const timer = window.setTimeout(() => {
+      const { parameters, progress: latest } = useBuilderStore.getState()
+      if (!latest || latest.received >= latest.total) return
+      const seen = new Set(Object.values(parameters).map((p) => p.index))
+      for (let i = 0; i < latest.total; i++) {
+        if (!seen.has(i)) void window.mavlink?.readParam(i)
+      }
+    }, 1500)
+    return () => window.clearTimeout(timer)
+  }, [progress])
+
+  const handleDownload = useCallback(async (): Promise<void> => {
+    useBuilderStore.getState().clearAll()
+    useBuilderStore.getState().setLoading(true)
+    try {
+      await window.mavlink?.requestParams()
+    } catch (err) {
+      // Without this, a rejected requestParams() (e.g. link drops mid-request)
+      // leaves isLoading stuck true and the Download button dead until reload.
+      useBuilderStore.getState().setLoading(false)
+      console.error('[ParameterView] requestParams failed:', err)
+    }
+  }, [])
+
   return (
-    <ReactFlowProvider>
-      <ParameterFlowCanvas />
-    </ReactFlowProvider>
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          top: '68px',
+          right: '16px',
+          zIndex: 30,
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center'
+        }}
+      >
+        {progress && (
+          <span
+            style={{
+              fontFamily: toolbarMono,
+              fontSize: '10px',
+              color: 'rgba(236,223,204,0.5)',
+              letterSpacing: '0.04em'
+            }}
+          >
+            {progress.received}/{progress.total}
+          </span>
+        )}
+        <button
+          type="button"
+          style={{ ...primaryBtn(isLoading), flex: 'none', padding: '8px 14px', fontSize: '10px' }}
+          disabled={isLoading}
+          onClick={() => void handleDownload()}
+        >
+          {isLoading ? 'Downloading…' : 'Download'}
+        </button>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            type="button"
+            style={{
+              ...pillStyle(viewMode === 'table', false),
+              minWidth: '0',
+              padding: '8px 12px'
+            }}
+            onClick={() => setViewMode('table')}
+          >
+            Table
+          </button>
+          <button
+            type="button"
+            style={{ ...pillStyle(viewMode === 'flow', false), minWidth: '0', padding: '8px 12px' }}
+            onClick={() => setViewMode('flow')}
+          >
+            Graph
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'table' ? (
+        <ParamTable />
+      ) : (
+        <ReactFlowProvider>
+          <ParameterFlowCanvas />
+        </ReactFlowProvider>
+      )}
+    </>
   )
 }

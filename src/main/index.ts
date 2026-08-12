@@ -119,7 +119,7 @@ function initializeMavlink(): void {
   const parser = getMavlinkParser()
 
   let paramTotalCount = 0
-  let paramReceivedCount = 0
+  const paramSeen = new Set<number>()
 
   // Wire up parser events to IPC
   parser.on('telemetry', (data) => {
@@ -136,16 +136,18 @@ function initializeMavlink(): void {
 
   parser.on('paramValue', (param) => {
     sendParamValue(param)
-    paramReceivedCount++
+    // Index-set dedup: PARAM_SET echoes and re-requested indices resend the
+    // same index, which a plain counter would double-count past `total`.
+    if (param.index >= 0) paramSeen.add(param.index)
     if (paramTotalCount > 0) {
-      sendParamProgress(paramReceivedCount, paramTotalCount)
+      sendParamProgress(paramSeen.size, paramTotalCount)
     }
   })
 
   // Reset param counters when a new PARAM_REQUEST_LIST is sent
   onParamRequest(() => {
     paramTotalCount = 0
-    paramReceivedCount = 0
+    paramSeen.clear()
   })
 
   parser.on('commandAck', (result) => {

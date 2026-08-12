@@ -570,8 +570,8 @@ export class MavlinkParser extends EventEmitter {
     const param_value = packet.readFloatLE(10)
     const param_count = packet.readUInt16LE(14)
     const param_index = packet.readUInt16LE(16)
-    const param_type = packet.readUInt8(18)
-    const param_id = packet.subarray(19, 35).toString('ascii').replace(/\0/g, '')
+    const param_id = packet.subarray(18, 34).toString('ascii').replace(/\0/g, '')
+    const param_type = packet.readUInt8(34)
 
     const param: ParamEntry = {
       id: param_id,

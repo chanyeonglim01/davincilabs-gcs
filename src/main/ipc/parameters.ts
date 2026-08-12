@@ -67,6 +67,25 @@ export function registerParameterHandlers(window: BrowserWindow): void {
       throw err
     }
   })
+
+  // Re-request a single parameter by index (used to fill gaps after PARAM_REQUEST_LIST streaming)
+  ipcMain.handle('mavlink:read-param', async (_event, index: number) => {
+    try {
+      const connection = getMavlinkConnection()
+
+      if (!connection.isConnected) {
+        throw new Error('Not connected to vehicle')
+      }
+
+      // Send PARAM_REQUEST_READ (msgid 20)
+      const buffer = createParamRequestRead(index)
+      connection.sendMessage(buffer)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Read param failed'
+      sendLogMessage('error', `Read param failed: ${message}`)
+      throw err
+    }
+  })
 }
 
 /**
@@ -93,11 +112,11 @@ export function sendParamProgress(received: number, total: number): void {
  * Create PARAM_REQUEST_LIST message buffer (msgid 21)
  */
 function createParamRequestList(): Buffer {
-  const buffer = Buffer.alloc(17) // MAVLink v2 header (10) + payload (5) + checksum (2)
+  const buffer = Buffer.alloc(14) // MAVLink v2 header (10) + payload (2) + checksum (2)
 
   // MAVLink v2 header
   buffer.writeUInt8(0xfd, 0) // Magic byte v2
-  buffer.writeUInt8(5, 1) // Payload length
+  buffer.writeUInt8(2, 1) // Payload length
   buffer.writeUInt8(0, 2) // Incompat flags
   buffer.writeUInt8(0, 3) // Compat flags
   buffer.writeUInt8(0, 4) // Seq
@@ -111,9 +130,8 @@ function createParamRequestList(): Buffer {
   buffer.writeUInt8(1, 10) // target_system
   buffer.writeUInt8(1, 11) // target_component
 
-  // Checksum (simplified)
   const checksum = calculateChecksum(buffer.subarray(1, 12), 159) // CRC_EXTRA = 159
-  buffer.writeUInt16LE(checksum, 15)
+  buffer.writeUInt16LE(checksum, 12)
 
   return buffer
 }
@@ -156,6 +174,35 @@ function createParamSet(param: ParamEntry): Buffer {
   // Checksum
   const checksum = calculateChecksum(buffer.subarray(1, 31), 168) // CRC_EXTRA = 168
   buffer.writeUInt16LE(checksum, 31)
+
+  return buffer
+}
+
+/**
+ * Create PARAM_REQUEST_READ message buffer (msgid 20)
+ * payload = param_index(int16,2) + target_system(1) + target_component(1) + param_id(16) = 20 bytes
+ * param_id is left zero-filled — we always look up by index.
+ */
+function createParamRequestRead(index: number): Buffer {
+  const buffer = Buffer.alloc(32) // MAVLink v2 header (10) + payload (20) + checksum (2)
+
+  buffer.writeUInt8(0xfd, 0)
+  buffer.writeUInt8(20, 1) // Payload length
+  buffer.writeUInt8(0, 2)
+  buffer.writeUInt8(0, 3)
+  buffer.writeUInt8(0, 4)
+  buffer.writeUInt8(255, 5)
+  buffer.writeUInt8(190, 6)
+  buffer.writeUInt8(20, 7) // msgid low (PARAM_REQUEST_READ)
+  buffer.writeUInt8(0, 8)
+  buffer.writeUInt8(0, 9)
+
+  buffer.writeInt16LE(index, 10) // param_index
+  buffer.writeUInt8(1, 12) // target_system
+  buffer.writeUInt8(1, 13) // target_component
+
+  const checksum = calculateChecksum(buffer.subarray(1, 30), 214) // CRC_EXTRA = 214
+  buffer.writeUInt16LE(checksum, 30)
 
   return buffer
 }
