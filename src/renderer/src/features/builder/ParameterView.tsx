@@ -1766,7 +1766,7 @@ interface EditPanelProps {
   uploadMsg: string | null
 }
 
-function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: EditPanelProps) {
+function EditPanel({ node, onFieldChange, onUpload, uploadMsg }: EditPanelProps) {
   const mono = "'JetBrains Mono', monospace"
   const grotesk = "'Space Grotesk', sans-serif"
   const border = '1px solid rgba(236,223,204,0.1)'
@@ -1949,7 +1949,8 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
         )}
         <button
           onClick={onUpload}
-          disabled={uploading}
+          disabled={true}
+          title="그래프 노드 값은 기체값과 동기화되지 않는 PX4 참고용 초기값입니다. 실제 쓰기는 Table 뷰를 사용하세요."
           style={{
             width: '100%',
             fontFamily: mono,
@@ -1957,16 +1958,16 @@ function EditPanel({ node, onFieldChange, onUpload, uploading, uploadMsg }: Edit
             fontWeight: 700,
             letterSpacing: '0.08em',
             padding: '9px',
-            background: uploading ? 'rgba(236,223,204,0.05)' : `${data.accentColor}18`,
-            border: `1px solid ${uploading ? 'rgba(236,223,204,0.12)' : data.accentColor + '55'}`,
+            background: 'rgba(236,223,204,0.05)',
+            border: '1px solid rgba(236,223,204,0.12)',
             borderRadius: '5px',
-            color: uploading ? 'rgba(236,223,204,0.25)' : data.accentColor,
-            cursor: uploading ? 'default' : 'pointer',
+            color: 'rgba(236,223,204,0.25)',
+            cursor: 'not-allowed',
             textTransform: 'uppercase',
             transition: 'all 0.15s ease'
           }}
         >
-          {uploading ? 'UPLOADING...' : `UPLOAD ${data.title}`}
+          표 뷰에서 편집하세요
         </button>
       </div>
     </div>
