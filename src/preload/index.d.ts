@@ -57,6 +57,9 @@ declare global {
         savedAt: number
       } | null>
       clearLastMission(): Promise<void>
+      deleteMission(opts?: {
+        armed?: boolean
+      }): Promise<{ success: boolean; vehicle: boolean; store: boolean; error?: string }>
       downloadMission(): Promise<{
         success: boolean
         items: {

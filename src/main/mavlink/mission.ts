@@ -105,7 +105,7 @@ function buildPacket(msgid: number, payload: Buffer): Buffer {
 }
 
 // ─── Message builders ──────────────────────────────────────────────────────────
-function buildMissionClearAll(targetSystem = 1, targetComponent = 1): Buffer {
+export function buildMissionClearAll(targetSystem = 1, targetComponent = 1): Buffer {
   const payload = Buffer.alloc(3)
   payload.writeUInt8(targetSystem, 0)
   payload.writeUInt8(targetComponent, 1)

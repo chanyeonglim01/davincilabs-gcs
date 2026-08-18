@@ -8,7 +8,7 @@ import type { Command, CommandResult, ConnectionConfig } from '../../renderer/sr
 import { getMavlinkConnection } from '../mavlink/connection'
 import { getMavlinkParser } from '../mavlink/parser'
 import { commandToBuffer, getCommandDescription } from '../mavlink/commander'
-import { MissionUploader } from '../mavlink/mission'
+import { MissionUploader, buildMissionClearAll } from '../mavlink/mission'
 import type { MissionWaypoint } from '../mavlink/mission'
 import {
   MissionDownloader,
@@ -273,6 +273,46 @@ export function registerCommandHandlers(): void {
   ipcMain.handle('mavlink:clear-last-mission', (): void => {
     setLastMission(null)
   })
+
+  // [2026-08-18] 미션 통합 삭제 — 기체 + GCS 저장본을 **한 번에**.
+  //  화면 편집본은 렌더러가 지운다(clearMission). 여기서는 기체와 영속 저장본만 담당.
+  //  ⚠아밍 중 거부: 비행 중 미션 삭제는 위험. 보드에도 같은 가드를 둔다(§보드명세).
+  //  ⚠기체 삭제는 **MISSION_CLEAR_ALL(45)** 1회 발신이며 ACK 를 기다리지 않는다 —
+  //    보드가 mission.dat 을 지우고 g_saved_n=0 으로 만드는 것이 실제 효과다.
+  ipcMain.handle(
+    'mavlink:delete-mission',
+    async (_event, opts?: { armed?: boolean }): Promise<{
+      success: boolean
+      vehicle: boolean
+      store: boolean
+      error?: string
+    }> => {
+      if (opts?.armed) {
+        return { success: false, vehicle: false, store: false, error: '아밍 중에는 삭제할 수 없습니다' }
+      }
+      const connection = getMavlinkConnection()
+      let vehicle = false
+      if (connection.isConnected) {
+        try {
+          connection.sendMessage(buildMissionClearAll())
+          vehicle = true
+          sendLogMessage('info', 'Mission delete: MISSION_CLEAR_ALL sent to vehicle')
+        } catch (e) {
+          sendLogMessage('error', `Mission delete (vehicle) failed: ${String(e)}`)
+        }
+      } else {
+        sendLogMessage('info', 'Mission delete: not connected — GCS 저장본만 삭제')
+      }
+      let store = false
+      try {
+        setLastMission(null)
+        store = true
+      } catch (e) {
+        sendLogMessage('error', `Mission delete (store) failed: ${String(e)}`)
+      }
+      return { success: store, vehicle, store }
+    }
+  )
 
   // Download mission via MAVLink Mission Protocol
   ipcMain.handle(

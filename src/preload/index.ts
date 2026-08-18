@@ -65,6 +65,11 @@ const mavlinkAPI = {
     savedAt: number
   } | null> => ipcRenderer.invoke('mavlink:get-last-mission'),
   clearLastMission: (): Promise<void> => ipcRenderer.invoke('mavlink:clear-last-mission'),
+  // [2026-08-18] 기체 + GCS 저장본 통합 삭제 (화면 편집본은 렌더러가 별도로 비움)
+  deleteMission: (opts?: {
+    armed?: boolean
+  }): Promise<{ success: boolean; vehicle: boolean; store: boolean; error?: string }> =>
+    ipcRenderer.invoke('mavlink:delete-mission', opts),
   downloadMission: (): Promise<{
     success: boolean
     items: {

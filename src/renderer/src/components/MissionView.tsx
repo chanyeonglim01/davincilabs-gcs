@@ -299,6 +299,10 @@ export function MissionView() {
   const [selectedUid, setSelectedUid] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
+  // [2026-08-18] LOAD 버튼용 — 저장된 직전 미션의 메타(개수·저장시각). null = 저장본 없음
+  // [2026-08-18] 아밍 중 미션 삭제 거부용. ⚠셀렉터 형태 유지(무셀렉터 구독은 30Hz 전체 리렌더 → OOM 이력)
+  const isArmed = useTelemetryStore((s) => s.telemetry?.status.armed ?? false)
+  const [savedInfo, setSavedInfo] = useState<{ count: number; savedAt: number } | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [downloadMsg, setDownloadMsg] = useState<string | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<{ seq: number; total: number } | null>(
@@ -861,6 +865,81 @@ export function MissionView() {
       .setWaypoints((prev) => prev.map((w) => (w.uid === uid ? { ...w, lat, lon } : w)))
   }, [])
 
+  // [2026-08-18] 저장본 메타 갱신 — 마운트 시 + 업로드 성공 시. 실패는 무시(버튼만 비활성)
+  const refreshSavedInfo = useCallback(async (): Promise<void> => {
+    try {
+      const s = await window.mavlink?.getLastMission()
+      setSavedInfo(s ? { count: s.count, savedAt: s.savedAt } : null)
+    } catch {
+      setSavedInfo(null)
+    }
+  }, [])
+
+  // [2026-08-18] DELETE — **세 곳을 한 번에** 지운다: 기체 / GCS 저장본 / 화면 편집본.
+  //  ⚠아밍 중 거부(렌더러·main·보드 3중 가드). 비행 중 미션 삭제는 위험하다.
+  //  ⚠기체 삭제는 mission.dat 과 g_saved_n 을 지우는 것 — **이미 아밍해서 모델에
+  //    올라간 미션은 이번 세션에선 남는다**(다음 부팅부터 깨끗). 문구로 알린다.
+  const handleDeleteMission = useCallback(async (): Promise<void> => {
+    if (isArmed) {
+      setUploadMsg('✗ 아밍 중에는 삭제할 수 없습니다 (디스암 후 시도)')
+      return
+    }
+    const cur = useMissionStore.getState().waypoints.length
+    const msg = [
+      '미션을 삭제합니다. 되돌릴 수 없습니다.',
+      '',
+      '· 기체 저장본 (mission.dat) — 아밍해도 복원되지 않음',
+      `· GCS 저장본${savedInfo ? ` (${savedInfo.count}개)` : ' (없음)'}`,
+      `· 화면 편집본${cur > 0 ? ` (${cur}개)` : ' (없음)'}`,
+      '',
+      '계속할까요?'
+    ].join('\n')
+    const ok = window.confirm(msg)
+    if (!ok) return
+    try {
+      const r = await window.mavlink?.deleteMission({ armed: isArmed })
+      useMissionStore.getState().clearMission()
+      setSavedInfo(null)
+      if (r?.error) {
+        setUploadMsg(`✗ ${r.error}`)
+      } else if (r?.vehicle) {
+        setUploadMsg('✓ 삭제 — 기체 + GCS 저장본 + 화면 (기체는 다음 부팅부터 완전 반영)')
+      } else {
+        setUploadMsg('✓ 삭제 — GCS 저장본 + 화면 (기체 미연결이라 기체 저장본은 그대로)')
+      }
+    } catch (err) {
+      setUploadMsg(`✗ 삭제 실패: ${err instanceof Error ? err.message : ''}`)
+    }
+  }, [isArmed, savedInfo])
+
+  // [2026-08-18] LOAD — 직전 업로드 미션을 **명시적으로** 불러온다.
+  //  자동복원(마운트)은 작업 중이면 안 덮지만, 이 버튼은 사용자가 의도한 것이므로
+  //  확인을 받고 덮는다. ⚠불러온 미션은 GCS 의 기억이지 기체 상태가 아니다.
+  const handleLoadLast = useCallback(async (): Promise<void> => {
+    try {
+      const saved = await window.mavlink?.getLastMission()
+      if (!saved?.waypoints?.length) {
+        setUploadMsg('✗ 저장된 미션이 없습니다 (업로드에 성공하면 자동 저장됩니다)')
+        setSavedInfo(null)
+        return
+      }
+      const when = new Date(saved.savedAt).toLocaleString()
+      const cur = useMissionStore.getState().waypoints.length
+      if (cur > 0) {
+        const ok = window.confirm(
+          `현재 편집 중인 미션 ${cur}개를 버리고
+저장본 ${saved.count}개(${when})를 불러올까요?`
+        )
+        if (!ok) return
+      }
+      useMissionStore.getState().restoreMission(saved.waypoints as unknown as Waypoint[])
+      setSavedInfo({ count: saved.count, savedAt: saved.savedAt })
+      setUploadMsg(`↺ 불러옴 — ${saved.count}개 (${when}). 기체 반영은 UPLOAD 필요`)
+    } catch (err) {
+      setUploadMsg(`✗ 불러오기 실패: ${err instanceof Error ? err.message : ''}`)
+    }
+  }, [])
+
   const handleUpload = async () => {
     if (waypoints.length === 0) return
     setUploading(true)
@@ -869,6 +948,7 @@ export function MissionView() {
       const result = await window.mavlink?.uploadMission(waypoints)
       if (result?.success) {
         setUploadMsg(`✓ ${result.count} items uploaded`)
+        void refreshSavedInfo()   // 업로드 성공분이 새 저장본이 된다
       } else {
         setUploadMsg(`✗ ${result?.error ?? 'Upload failed'}`)
       }
@@ -885,6 +965,7 @@ export function MissionView() {
   //  작업 중인 미션이 있으면 절대 덮지 않는다(비동기 완료 시점에 한 번 더 확인).
   useEffect((): (() => void) | undefined => {
     if (!window.mavlink?.getLastMission) return undefined
+    void refreshSavedInfo()
     if (useMissionStore.getState().waypoints.length > 0) return undefined
     let cancelled = false
     void (async (): Promise<void> => {
@@ -1120,6 +1201,56 @@ export function MissionView() {
           }}
         >
           CLEAR
+        </button>
+
+        <button
+          onClick={handleDeleteMission}
+          disabled={isArmed}
+          title={
+            isArmed
+              ? '아밍 중에는 삭제할 수 없습니다'
+              : '미션 삭제 — 기체 저장본 + GCS 저장본 + 화면 편집본을 한 번에'
+          }
+          style={{
+            fontFamily: mono,
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            padding: '5px 12px',
+            background: 'transparent',
+            border: `1px solid ${isArmed ? 'rgba(236,223,204,0.12)' : 'rgba(214,120,110,0.5)'}`,
+            borderRadius: '4px',
+            color: isArmed ? 'rgba(236,223,204,0.25)' : 'rgba(226,140,130,0.95)',
+            cursor: isArmed ? 'default' : 'pointer'
+          }}
+        >
+          DELETE
+        </button>
+
+        <button
+          onClick={handleLoadLast}
+          disabled={!savedInfo}
+          title={
+            savedInfo
+              ? `직전 업로드 미션 불러오기 — ${savedInfo.count}개, ${new Date(savedInfo.savedAt).toLocaleString()} (GCS 저장본)`
+              : '저장된 미션 없음 — 업로드에 성공하면 자동 저장됩니다'
+          }
+          style={{
+            fontFamily: mono,
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            padding: '5px 12px',
+            background: savedInfo ? 'rgba(236,223,204,0.06)' : 'transparent',
+            border: `1px solid ${savedInfo ? 'rgba(236,223,204,0.35)' : 'rgba(236,223,204,0.18)'}`,
+            borderRadius: '4px',
+            color: savedInfo ? '#ECDFCC' : 'rgba(236,223,204,0.4)',
+            cursor: savedInfo ? 'pointer' : 'default'
+          }}
+        >
+          {savedInfo ? `LOAD (${savedInfo.count})` : 'LOAD'}
         </button>
 
         <button
