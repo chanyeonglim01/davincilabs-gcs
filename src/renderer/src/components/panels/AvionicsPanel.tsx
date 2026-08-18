@@ -15,6 +15,14 @@ const COMMANDS: { type: Command['type']; label: string; params?: Command['params
   { type: 'RTL', label: 'RTL' }
 ]
 
+// HEARTBEAT.type → 표시명. 보드 MAVLinkCodecAdapter/Const_type이 신고하는 기체 타입.
+// VEHICLE_TYPE 매핑: 0=Quad→2, 1=LiftCruise→22, 2=Tiltrotor→21 (진행현황 §236-3).
+const VEHICLE_TYPE_LABEL: Record<number, string> = {
+  2: 'QUAD',
+  21: 'TILTROTOR',
+  22: 'LIFT-CRUISE'
+}
+
 // Mode entry — ArduPilot 스타일로 "모드 진입"과 "임무 실행"을 분리한다.
 // AUTO 진입은 IDLE 진입이므로 무확인. MANUAL/EMERGENCY는 사용자 경고 후 진입.
 type ModeKey = 'MANUAL' | 'AUTO' | 'EMER'
@@ -97,6 +105,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
     subState,
     rcOverride,
     rcLink,
+    vehicleType,
     gpsFix,
     satellites,
     lihaiRxMs,
@@ -121,6 +130,7 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
         subState: status?.subState ?? 0,
         rcOverride: status?.rcOverride ?? false,
         rcLink: status?.rcLink ?? false,
+        vehicleType: status?.vehicleType ?? -1,
         gpsFix: status?.gpsFix ?? 0,
         satellites: status?.satellites ?? 0,
         lihaiRxMs: status?.lihaiRxMs ?? 0,
@@ -592,6 +602,19 @@ export function AvionicsPanel({ onDragHandle }: AvionicsPanelProps): React.JSX.E
         >
           {systemStatus}
         </div>
+        {vehicleType >= 0 && (
+          <div
+            style={{
+              fontFamily: "'Space Grotesk', sans-serif",
+              fontSize: '10px',
+              color: 'rgba(236, 223, 204, 0.4)',
+              marginTop: '2px',
+              letterSpacing: '0.06em'
+            }}
+          >
+            AIRFRAME {VEHICLE_TYPE_LABEL[vehicleType] ?? `MAV_TYPE ${vehicleType}`}
+          </div>
+        )}
         {/* Mode selector buttons */}
         <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
           {MODE_ENTRIES.map((entry) => {

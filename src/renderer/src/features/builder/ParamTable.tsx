@@ -1,6 +1,6 @@
 /**
  * ParamTable — Mission-Planner-style "전체 매개변수 목록" view sourced directly
- * from the board's 58-entry PARAM_VALUE stream: a left category tree filters a
+ * from the board's 34-entry PARAM_VALUE stream: a left category tree filters a
  * right-hand table with 명령/값/Default/단위/옵션/설명 columns.
  *
  * Grouping (tree nodes) is by the board's own index ranges (params_table.h
@@ -36,9 +36,7 @@ const INDEX_GROUPS: IndexGroup[] = [
   { label: '자동비행 수평속도', lo: 15, hi: 22 },
   { label: '자동비행 수평위치', lo: 23, hi: 24 },
   { label: '자동비행 고도', lo: 25, hi: 29 },
-  { label: '수동비행 자세각', lo: 30, hi: 41 },
-  { label: '수동비행 자세율', lo: 42, hi: 53 },
-  { label: '속도·한계', lo: 54, hi: 57 }
+  { label: '속도·한계', lo: 30, hi: 33 }
 ]
 const OTHER_GROUP_LABEL = '기타'
 
@@ -80,32 +78,6 @@ const PARAM_DESCRIPTIONS: Record<string, string> = {
   MPC_VELZ_I: '수직 속도 제어 적분(I) 게인',
   MPC_VELZ_D: '수직 속도 제어 미분(D) 게인',
   MPC_VELZ_N: '수직 속도 D항 필터 계수',
-  // F. 수동비행 자세각
-  RC_ROLL_P: '수동조종 시 롤 자세각 제어 비례(P) 게인',
-  RC_ROLL_I: '수동조종 시 롤 자세각 제어 적분(I) 게인',
-  RC_ROLL_D: '수동조종 시 롤 자세각 제어 미분(D) 게인',
-  RC_ROLL_N: '수동조종 시 롤 자세각 D항 필터 계수',
-  RC_PITCH_P: '수동조종 시 피치 자세각 제어 비례(P) 게인',
-  RC_PITCH_I: '수동조종 시 피치 자세각 제어 적분(I) 게인',
-  RC_PITCH_D: '수동조종 시 피치 자세각 제어 미분(D) 게인',
-  RC_PITCH_N: '수동조종 시 피치 자세각 D항 필터 계수',
-  RC_YAW_P: '수동조종 시 요 자세각 제어 비례(P) 게인',
-  RC_YAW_I: '수동조종 시 요 자세각 제어 적분(I) 게인',
-  RC_YAW_D: '수동조종 시 요 자세각 제어 미분(D) 게인',
-  RC_YAW_N: '수동조종 시 요 자세각 D항 필터 계수',
-  // G. 수동비행 자세율
-  RC_ROLLRATE_P: '수동조종 시 롤 각속도 제어 비례(P) 게인',
-  RC_ROLLRATE_I: '수동조종 시 롤 각속도 제어 적분(I) 게인',
-  RC_ROLLRATE_D: '수동조종 시 롤 각속도 제어 미분(D) 게인',
-  RC_ROLLRATE_N: '수동조종 시 롤 각속도 D항 필터 계수',
-  RC_PITCHRATE_P: '수동조종 시 피치 각속도 제어 비례(P) 게인',
-  RC_PITCHRATE_I: '수동조종 시 피치 각속도 제어 적분(I) 게인',
-  RC_PITCHRATE_D: '수동조종 시 피치 각속도 제어 미분(D) 게인',
-  RC_PITCHRATE_N: '수동조종 시 피치 각속도 D항 필터 계수',
-  RC_YAWRATE_P: '수동조종 시 요 각속도 제어 비례(P) 게인',
-  RC_YAWRATE_I: '수동조종 시 요 각속도 제어 적분(I) 게인',
-  RC_YAWRATE_D: '수동조종 시 요 각속도 제어 미분(D) 게인',
-  RC_YAWRATE_N: '수동조종 시 요 각속도 D항 필터 계수',
   // H. 속도·한계
   MPC_VEL_MAX: '미션 순항 수평 속도 지령값',
   MPC_Z_VEL_MAX: '최대 상승률',
@@ -147,30 +119,6 @@ const PARAM_RANGES: Record<string, [number, number]> = {
   MPC_VELZ_I: [0, 10],
   MPC_VELZ_D: [0, 10],
   MPC_VELZ_N: [1, 500],
-  RC_ROLL_P: [0, 20],
-  RC_ROLL_I: [0, 20],
-  RC_ROLL_D: [0, 5],
-  RC_ROLL_N: [1, 500],
-  RC_PITCH_P: [0, 20],
-  RC_PITCH_I: [0, 20],
-  RC_PITCH_D: [0, 5],
-  RC_PITCH_N: [1, 500],
-  RC_YAW_P: [0, 20],
-  RC_YAW_I: [0, 20],
-  RC_YAW_D: [0, 5],
-  RC_YAW_N: [1, 500],
-  RC_ROLLRATE_P: [0, 2],
-  RC_ROLLRATE_I: [0, 2],
-  RC_ROLLRATE_D: [0, 0.5],
-  RC_ROLLRATE_N: [1, 500],
-  RC_PITCHRATE_P: [0, 2],
-  RC_PITCHRATE_I: [0, 2],
-  RC_PITCHRATE_D: [0, 0.5],
-  RC_PITCHRATE_N: [1, 500],
-  RC_YAWRATE_P: [0, 5],
-  RC_YAWRATE_I: [0, 2],
-  RC_YAWRATE_D: [0, 0.5],
-  RC_YAWRATE_N: [1, 500],
   MPC_VEL_MAX: [0.5, 20],
   MPC_Z_VEL_MAX: [0.5, 10],
   MPC_Z_VEL_MIN: [-10, -0.5],
@@ -313,7 +261,7 @@ export function ParamTable(): JSX.Element {
             }}
           />
           <span style={{ fontFamily: mono, fontSize: '10px', color: 'rgba(236,223,204,0.35)' }}>
-            {totalCount}/58
+            {totalCount}/34
           </span>
           {isArmed && (
             <span

@@ -50,6 +50,8 @@ export interface StatusData {
   rcOverride?: boolean
   /** RC link up (custom_mode bit 25). True = RC 값 수신 중 (connect). */
   rcLink?: boolean
+  /** Airframe from HEARTBEAT.type (MAV_TYPE: 2=QUADROTOR, 21=VTOL_TILTROTOR, 22=VTOL_FIXEDROTOR=lift-cruise). */
+  vehicleType?: number
   systemStatus: string
   /** GPS fix_type from GPS_RAW_INT (0/1=no fix, 2=2D, 3=3D, 4=DGPS, 5/6=RTK). */
   gpsFix?: number

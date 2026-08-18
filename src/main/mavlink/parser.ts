@@ -372,6 +372,9 @@ export class MavlinkParser extends EventEmitter {
     const base_mode = packet.readUInt8(16)
     const system_status = packet.readUInt8(19)
     const custom_mode = packet.readUInt32LE(10)
+    // HEARTBEAT.type (payload[4] = abs 14) — 보드 MAVLinkCodecAdapter/Const_type이 넣는 기체 타입.
+    // 현행 보드는 uint8(22) = MAV_TYPE.VTOL_FIXEDROTOR (lift-cruise) 고정.
+    const vehicle_type = packet.readUInt8(14)
 
     const armed = (base_mode & MAV_MODE_FLAG.SAFETY_ARMED) !== 0
     const statusStr = this.getSystemStatusString(system_status)
@@ -391,6 +394,7 @@ export class MavlinkParser extends EventEmitter {
       this.telemetryState.status.subState = decoded.subState
       this.telemetryState.status.rcOverride = decoded.rcOverride
       this.telemetryState.status.rcLink = decoded.rcLink
+      this.telemetryState.status.vehicleType = vehicle_type
     }
 
     this.emit('heartbeat')
