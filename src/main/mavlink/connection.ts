@@ -37,6 +37,13 @@ export class MavlinkConnection extends EventEmitter {
   private transport: 'udp' | 'serial' = 'udp'
   private config: ConnectionConfig | null = null
   private heartbeatTimer: NodeJS.Timeout | null = null
+  /** [2026-08-18] GCS→기체 1 Hz HEARTBEAT 송신 타이머.
+   *  이 GCS 는 지금까지 HEARTBEAT 을 **받기만** 하고 보내지 않았다. 보드 FailsafeMgr 의
+   *  링크 페일세이프 조건이 (rc_link==0 && gcs_link==0) 인데, RC 수신기 없이 비행하면
+   *  gcs_link 를 세울 근거가 GCS 하트비트뿐이라 아밍 1 s 뒤 Emergency 로 떨어졌다
+   *  (보드 flight_log_5/6 실측). MAVLink 표준 GCS 는 원래 1 Hz 로 송신한다. */
+  private gcsHbTxTimer: NodeJS.Timeout | null = null
+  private gcsHbSeq: number = 0
   private lastHeartbeat: number = 0
   private _isConnected: boolean = false
   private _heartbeatActive: boolean = false
@@ -78,6 +85,7 @@ export class MavlinkConnection extends EventEmitter {
         this._heartbeatActive = false
         this.lastHeartbeat = 0
         this.startHeartbeatMonitor()
+        this.startGcsHeartbeatTx()
         this.setLinkState('WAITING_HEARTBEAT')
         this.emit('connected')
         resolve()
@@ -110,6 +118,7 @@ export class MavlinkConnection extends EventEmitter {
         this._isConnected = false
         this._heartbeatActive = false
         this.stopHeartbeatMonitor()
+        this.stopGcsHeartbeatTx() // [세션A §315-3] close 경로 타이머 누수 수정
         // Only transition to DISCONNECTED if we did not already enter ERROR.
         if (this._linkState !== 'ERROR') {
           this.setLinkState('DISCONNECTED')
@@ -161,6 +170,7 @@ export class MavlinkConnection extends EventEmitter {
         this._heartbeatActive = false
         this.lastHeartbeat = 0
         this.startHeartbeatMonitor()
+        this.startGcsHeartbeatTx()
         this.setLinkState('WAITING_HEARTBEAT')
         this.emit('connected')
         resolve()
@@ -182,6 +192,7 @@ export class MavlinkConnection extends EventEmitter {
         this._isConnected = false
         this._heartbeatActive = false
         this.stopHeartbeatMonitor()
+        this.stopGcsHeartbeatTx() // [세션A §315-3] close 경로 타이머 누수 수정
         if (this._linkState !== 'ERROR') {
           this.setLinkState('DISCONNECTED')
         }
@@ -233,6 +244,7 @@ export class MavlinkConnection extends EventEmitter {
     }
     this.transport = 'udp'
     this.stopHeartbeatMonitor()
+    this.stopGcsHeartbeatTx()
     this._isConnected = false
     this._heartbeatActive = false
     this.config = null
@@ -356,6 +368,62 @@ export class MavlinkConnection extends EventEmitter {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
     }
+  }
+
+  /** [2026-08-18] GCS HEARTBEAT(msgid 0) 1 Hz 송신 시작. 보드가 gcs_link 판정에 사용. */
+  private startGcsHeartbeatTx(): void {
+    this.stopGcsHeartbeatTx()
+    this.gcsHbTxTimer = setInterval(() => {
+      if (!this._isConnected) return
+      try {
+        this.sendMessage(this.buildGcsHeartbeat())
+      } catch (e) {
+        console.error('[MAVLink] GCS heartbeat send error:', e)
+      }
+    }, 1000)
+  }
+
+  private stopGcsHeartbeatTx(): void {
+    if (this.gcsHbTxTimer) {
+      clearInterval(this.gcsHbTxTimer)
+      this.gcsHbTxTimer = null
+    }
+  }
+
+  /** MAVLink v2 HEARTBEAT 인코딩. 와이어 순서는 크기 내림차순:
+   *  custom_mode(u32) · type(u8) · autopilot(u8) · base_mode(u8) · system_status(u8) · version(u8).
+   *  CRC_EXTRA = 50 (CLAUDE.md Pitfalls 표와 일치). sysid 255 / compid 190 (GCS 식별자 규칙). */
+  private buildGcsHeartbeat(): Buffer {
+    const PAYLOAD_LEN = 9
+    const buf = Buffer.alloc(10 + PAYLOAD_LEN + 2)
+    buf.writeUInt8(0xfd, 0) // Magic byte v2
+    buf.writeUInt8(PAYLOAD_LEN, 1)
+    buf.writeUInt8(0, 2) // Incompat flags
+    buf.writeUInt8(0, 3) // Compat flags
+    buf.writeUInt8(this.gcsHbSeq & 0xff, 4)
+    this.gcsHbSeq = (this.gcsHbSeq + 1) & 0xff
+    buf.writeUInt8(255, 5) // sysid: GCS
+    buf.writeUInt8(190, 6) // compid: MAV_COMP_ID_MISSIONPLANNER
+    buf.writeUInt8(0, 7) // msgid 0 (HEARTBEAT)
+    buf.writeUInt8(0, 8)
+    buf.writeUInt8(0, 9)
+    buf.writeUInt32LE(0, 10) // custom_mode
+    buf.writeUInt8(6, 14) // type: MAV_TYPE_GCS
+    buf.writeUInt8(8, 15) // autopilot: MAV_AUTOPILOT_INVALID
+    buf.writeUInt8(0, 16) // base_mode
+    buf.writeUInt8(4, 17) // system_status: MAV_STATE_ACTIVE
+    buf.writeUInt8(3, 18) // mavlink_version
+    // CRC-16/MCRF4XX over [len..payload] + CRC_EXTRA(50)
+    let crc = 0xffff
+    const upd = (b: number): void => {
+      const tmp = b ^ (crc & 0xff)
+      const tmpShifted = (tmp ^ (tmp << 4)) & 0xff
+      crc = ((crc >> 8) ^ (tmpShifted << 8) ^ (tmpShifted << 3) ^ (tmpShifted >> 4)) & 0xffff
+    }
+    for (let i = 1; i < 10 + PAYLOAD_LEN; i++) upd(buf[i])
+    upd(50)
+    buf.writeUInt16LE(crc, 10 + PAYLOAD_LEN)
+    return buf
   }
 }
 

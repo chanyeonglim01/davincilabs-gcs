@@ -16,6 +16,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useBuilderStore } from '@renderer/store/builderStore'
+import { useTelemetryStore } from '@renderer/store/telemetryStore'
 import { ParamTable } from './ParamTable'
 import { pillStyle, primaryBtn } from '@renderer/components/test/testStyles'
 
@@ -2065,8 +2066,17 @@ function ParameterFlowCanvas() {
     [setNodes]
   )
 
+  // [2026-08-18 세션A §324-2] 아밍 중 업로드 차단 — ParamTable.applyEdit 과 대칭.
+  // Upload 는 노드의 필드 전체를 PARAM_SET 으로 밀어넣으므로(전량 덮어쓰기),
+  // 비행 중 클릭 한 번에 활성 게인이 통째로 바뀌는 위험이 있었다.
+  const isArmed = useTelemetryStore((s) => s.telemetry?.status.armed ?? false)
+
   const handleUpload = useCallback(async () => {
     if (!selectedNode) return
+    if (isArmed) {
+      setUploadMsg('✗ Blocked: vehicle is ARMED')
+      return
+    }
     const data = selectedNode.data as ParamNodeData
     setUploading(true)
     setUploadMsg(null)
@@ -2087,7 +2097,7 @@ function ParameterFlowCanvas() {
     } finally {
       setUploading(false)
     }
-  }, [selectedNode])
+  }, [selectedNode, isArmed])
 
   const mono = "'JetBrains Mono', monospace"
 
