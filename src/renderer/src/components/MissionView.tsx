@@ -879,6 +879,30 @@ export function MissionView() {
     }
   }
 
+  // [2026-08-18] 앱 시작 시 **직전 업로드 미션**을 되살린다 (MP/QGC 동작).
+  //  ⚠이건 GCS 의 기억이지 기체 상태가 아니다 — 기체가 재부팅했으면 미션은 사라졌으므로
+  //    실제로 날리려면 다시 Upload 해야 한다. 그래서 안내 문구를 함께 띄운다.
+  //  작업 중인 미션이 있으면 절대 덮지 않는다(비동기 완료 시점에 한 번 더 확인).
+  useEffect((): (() => void) | undefined => {
+    if (!window.mavlink?.getLastMission) return undefined
+    if (useMissionStore.getState().waypoints.length > 0) return undefined
+    let cancelled = false
+    void (async (): Promise<void> => {
+      try {
+        const saved = await window.mavlink?.getLastMission()
+        if (cancelled || !saved?.waypoints?.length) return
+        if (useMissionStore.getState().waypoints.length > 0) return
+        useMissionStore.getState().restoreMission(saved.waypoints as unknown as Waypoint[])
+        setUploadMsg(`↺ 직전 미션 복원 (${saved.count}개) — 기체 반영은 Upload 필요`)
+      } catch (err) {
+        console.error('[Mission] restore failed:', err)
+      }
+    })()
+    return (): void => {
+      cancelled = true
+    }
+  }, [])
+
   // Subscribe to mission download progress while a download is active.
   useEffect((): (() => void) | undefined => {
     if (!window.mavlink?.onMissionDownloadProgress) return undefined

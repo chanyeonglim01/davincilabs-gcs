@@ -36,6 +36,8 @@ interface MissionStore {
   nextUid: () => number
   clearMission: () => void
   setDesignMode: (mode: DesignMode) => void
+  /** [2026-08-18] 저장된 미션 복원. uid 충돌을 막으려 uidCounter 도 함께 올린다. */
+  restoreMission: (wps: Waypoint[]) => void
 }
 
 export const useMissionStore = create<MissionStore>((set, get) => ({
@@ -59,5 +61,13 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
 
   clearMission: () => set({ waypoints: [], uidCounter: 1, designMode: 'none' }),
 
-  setDesignMode: (mode) => set({ designMode: mode })
+  setDesignMode: (mode) => set({ designMode: mode }),
+
+  restoreMission: (wps) =>
+    set({
+      waypoints: wps,
+      // 복원된 uid 최대값 다음부터 발급 — 안 그러면 새 WP 가 기존 uid 와 겹쳐
+      // 드래그/삭제가 엉뚱한 웨이포인트에 적용된다.
+      uidCounter: wps.reduce((m, w) => Math.max(m, w.uid ?? 0), 0) + 1
+    })
 }))

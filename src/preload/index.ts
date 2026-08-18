@@ -58,6 +58,13 @@ const mavlinkAPI = {
     }[]
   ): Promise<{ success: boolean; count: number; error?: string }> =>
     ipcRenderer.invoke('mavlink:upload-mission', waypoints),
+  // [2026-08-18] 직전 업로드 미션 (GCS 기억. 기체 상태 아님)
+  getLastMission: (): Promise<{
+    waypoints: Record<string, unknown>[]
+    count: number
+    savedAt: number
+  } | null> => ipcRenderer.invoke('mavlink:get-last-mission'),
+  clearLastMission: (): Promise<void> => ipcRenderer.invoke('mavlink:clear-last-mission'),
   downloadMission: (): Promise<{
     success: boolean
     items: {

@@ -16,6 +16,8 @@ import {
   type DownloadedMissionItem
 } from '../mavlink/missionDownloader'
 import { sendLogMessage } from './telemetry'
+import { getLastMission, setLastMission } from '../store'
+import type { PersistedMission } from '../store'
 
 /**
  * Register command IPC handlers
@@ -241,6 +243,14 @@ export function registerCommandHandlers(): void {
     try {
       const result = await uploader.upload(waypoints)
       if (result.success) {
+        // [2026-08-18] MP/QGC 처럼 "직전 업로드 미션"을 기억한다.
+        //  성공했을 때만 저장 — 실패분을 기억하면 기체에 없는 미션을 있는 것처럼 보여준다.
+        //  저장은 부가 기능이므로 실패해도 업로드 결과를 망치지 않는다.
+        try {
+          setLastMission({ waypoints, count: result.count, savedAt: Date.now() })
+        } catch (e) {
+          console.error('[Mission] failed to persist last mission:', e)
+        }
         sendLogMessage('info', `Mission uploaded: ${result.count} items`)
       } else {
         sendLogMessage('error', `Mission upload failed: ${result.error}`)
@@ -250,6 +260,18 @@ export function registerCommandHandlers(): void {
       parser.off('missionRequest', onRequest)
       parser.off('missionAck', onAck)
     }
+  })
+
+  // [2026-08-18] 마지막으로 업로드한 미션 조회 — 앱 재시작 후 작업 내용 복원용.
+  //  ⚠이것은 **GCS 의 기억**이지 기체 상태가 아니다. 기체가 재부팅했다면 미션은 사라졌으므로
+  //    복원된 미션을 실제로 날리려면 다시 업로드해야 한다(보드 영속화는 미구현).
+  ipcMain.handle('mavlink:get-last-mission', (): PersistedMission | null => {
+    return getLastMission()
+  })
+
+  // 기억된 미션 삭제 (사용자가 명시적으로 비울 때)
+  ipcMain.handle('mavlink:clear-last-mission', (): void => {
+    setLastMission(null)
   })
 
   // Download mission via MAVLink Mission Protocol

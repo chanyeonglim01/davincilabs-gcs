@@ -46,6 +46,12 @@ declare global {
           loiterRadius: number
         }[]
       ): Promise<{ success: boolean; count: number; error?: string }>
+      getLastMission(): Promise<{
+        waypoints: Record<string, unknown>[]
+        count: number
+        savedAt: number
+      } | null>
+      clearLastMission(): Promise<void>
       downloadMission(): Promise<{
         success: boolean
         items: {
