@@ -237,16 +237,17 @@ const TILES: Record<
   string,
   { url: string; maxZoom: number; maxNativeZoom?: number; subdomains?: string }
 > = {
+  // Served by the main process from the on-disk tile cache (src/main/tileCache.ts),
+  // fetched upstream when online — same layers as MapBackground.
   satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    url: 'gcs-tiles://tiles/sat/{z}/{x}/{y}',
     maxZoom: 22,
     maxNativeZoom: 17
   },
   dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    url: 'gcs-tiles://tiles/dark/{z}/{x}/{y}',
     maxZoom: 22,
-    maxNativeZoom: 19,
-    subdomains: 'abcd'
+    maxNativeZoom: 19
   }
 }
 

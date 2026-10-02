@@ -33,6 +33,11 @@ if (process.platform === 'darwin') {
 // <userData>/logs/gcs-crash.log so a white screen is no longer silent.
 initCrashLogging()
 
+// Map tiles come through gcs-tiles:// (disk cache + upstream fetch) so the map
+// keeps working offline. Privileged schemes must be declared before ready.
+import { registerTileScheme, installTileCache } from './tileCache'
+registerTileScheme()
+
 // MAVLink connection and parser
 import { getMavlinkConnection } from './mavlink/connection'
 import { getMavlinkParser } from './mavlink/parser'
@@ -218,6 +223,9 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // Serve gcs-tiles:// from <appData>/davincilabs-gcs/tiles, filling it online.
+  installTileCache()
 
   // Allow map tile requests (CORS bypass for external tile servers)
   // Only add header if not already present — duplicate CORS headers cause ERR_FAILED

@@ -37,6 +37,11 @@ const createDroneIcon = (heading: number) =>
     className: ''
   })
 
+// Tiles are requested through the main process (gcs-tiles://, see
+// src/main/tileCache.ts): served from the on-disk cache when present, fetched
+// from ArcGIS World_Imagery / CARTO dark otherwise. Anything viewed online once
+// — or seeded with scripts/seed_tiles.mjs — therefore works offline.
+//
 // ArcGIS World_Imagery's actual cached resolution varies by region — many areas
 // (especially non-major-city flight-test sites) have no tiles past z17, so
 // requesting z18/19 there 404s and leaves a blank gap. maxNativeZoom caps the
@@ -47,15 +52,14 @@ const TILES: Record<
   { url: string; maxZoom: number; maxNativeZoom?: number; subdomains?: string }
 > = {
   satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    url: 'gcs-tiles://tiles/sat/{z}/{x}/{y}',
     maxZoom: 22,
     maxNativeZoom: 17
   },
   dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    url: 'gcs-tiles://tiles/dark/{z}/{x}/{y}',
     maxZoom: 22,
-    maxNativeZoom: 19,
-    subdomains: 'abcd'
+    maxNativeZoom: 19
   }
 }
 
@@ -274,9 +278,15 @@ export function MapBackground() {
   // and rebuilt the layer on every one of the 30 telemetry frames a second,
   // which was the single most expensive thing this component did.
   useEffect(() => {
-    // Number of points currently rendered, so a stationary vehicle does not make
-    // Leaflet re-project the whole path five times a second.
-    let drawnCount = -1
+    // Identity of the path currently rendered, so a stationary vehicle does not
+    // make Leaflet re-project the whole path five times a second.
+    //
+    // This must NOT be just the point count: the store ages points out after
+    // TRAIL_TTL_MS at the same rate it adds them during steady cruise, so the
+    // length sat constant for tens of seconds while the content moved — the
+    // trail froze behind the vehicle until a speed change broke the tie.
+    // First and last timestamps change on every add or expiry.
+    let drawnKey = ''
 
     // The map handle is read inside draw(), not captured here: bailing out once
     // because the map was not ready yet would leave the trail dead forever.
@@ -289,14 +299,15 @@ export function MapBackground() {
 
       if (path.length < 2) {
         trail?.setLatLngs([])
-        drawnCount = path.length
+        drawnKey = ''
         return
       }
 
       // A trail from a previous map instance is no longer attached — re-create it.
       const attached = trail !== null && map.hasLayer(trail)
-      if (attached && path.length === drawnCount) return
-      drawnCount = path.length
+      const key = `${path.length}:${path[0].timestamp}:${path[path.length - 1].timestamp}`
+      if (attached && key === drawnKey) return
+      drawnKey = key
 
       const coords: L.LatLngExpression[] = path.map((p) => [p.lat, p.lon])
 

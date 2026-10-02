@@ -76,6 +76,24 @@ pnpm build:win    # NSIS 설치본 생성 → dist/davincilabs-gcs-<ver>-setup.e
 
 ---
 
+## 4-1. 오프라인 지도 (타일 캐시)
+
+지도 타일은 `gcs-tiles://` 스킴으로 **메인 프로세스가 중계**한다(`src/main/tileCache.ts`).
+온라인일 때 받은 타일은 전부 디스크에 저장되고, 오프라인에서는 저장본으로 그린다.
+
+- 캐시 위치: `%APPDATA%\davincilabs-gcs\tiles\<layer>\<z>\<x>\<y>` (dev·설치본 공통)
+- 비행장 주변을 **미리 받아 두기**(노트북마다 1회, 온라인 상태에서):
+  ```powershell
+  node scripts/seed_tiles.mjs                              # 기본 = 한국교통대 충주캠퍼스(36.968, 127.866)
+  node scripts/seed_tiles.mjs --lat 37.123 --lon 127.456   # 다른 장소
+  node scripts/seed_tiles.mjs --dry-run                    # 장수만 세기
+  ```
+  기본 범위: 위성 z12~17·다크 z12~18, 반경 8 km(고배율은 2~5 km) ≈ 4,300장·수십 MB.
+- 다른 노트북으로 옮길 때는 위 `tiles` 폴더를 통째로 복사해도 된다.
+- 3D(Cesium) 뷰는 아직 온라인 전용이다.
+
+---
+
 ## 5. UDP 포트 (연결 모드)
 
 | 모드 | GCS listen | GCS 송신대상 |
