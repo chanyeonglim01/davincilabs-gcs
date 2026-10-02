@@ -201,7 +201,11 @@ function actionToParams(wp: MissionWaypoint): ItemParams {
     case 'VTOL_TRANSITION_FW':
       return {
         frame: MAV_FRAME_MISSION,
-        command: 3000,
+        // FCC contract (검증 md C-b-238): the board's MsnStoreWriter stores the
+        // command via a saturating uint8 cast, so 3000 arrives as 255 (not 184)
+        // and the converter drops the item. Send the board's transition code 184
+        // directly — its converter maps 184 → internal mode 6 (forward transition).
+        command: 184,
         autocontinue: 1,
         param1: 4,
         param2: 0,
@@ -307,6 +311,34 @@ export class MissionUploader {
     }
     if (!this.conn.isConnected) {
       return { success: false, count: 0, error: 'Not connected to vehicle' }
+    }
+
+    // FCC mission storage consumes only 10 slots (converter/PathManager loop k=1:10);
+    // items beyond 10 upload fine but silently never reach the flight path (C-b deep-dive 2).
+    if (waypoints.length > 10) {
+      return {
+        success: false,
+        count: 0,
+        error: `Mission has ${waypoints.length} items but the FCC flies only the first 10 — reduce to 10 or fewer`
+      }
+    }
+
+    // FCC mission-converter contract guard (2026-08-28, 검증 md C-b-231):
+    //  - RTL item: converter maps cmd 20 to fly-to-position with raw (0,0,0)
+    //    geodetic coords → ~12,000 km NED command. Use the RTL command button instead.
+    //  - TRANSITION_MC: converter ignores param1 and treats it as a FORWARD
+    //    transition. Back-transition is automatic on VTOL_LAND approach.
+    const unsupported = waypoints
+      .map((wp, i) => ({ i, action: wp.action }))
+      .filter(({ action }) => action === 'RTL' || action === 'VTOL_TRANSITION_MC')
+    if (unsupported.length > 0) {
+      return {
+        success: false,
+        count: 0,
+        error: `Unsupported mission item(s) for FCC: ${unsupported
+          .map(({ i, action }) => `#${i} ${action}`)
+          .join(', ')} — remove them (RTL: use the RTL command button; back-transition happens automatically on Land approach)`
+      }
     }
 
     this.items = waypoints.map((wp) => actionToParams(wp))

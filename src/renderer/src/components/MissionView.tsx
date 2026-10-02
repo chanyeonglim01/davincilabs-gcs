@@ -47,6 +47,9 @@ interface ActionDef {
   hasAlt: boolean
   icon: string
   group: 'vtol' | 'common'
+  // Present → the FCC mission converter cannot consume this item safely;
+  // it is hidden from pickers and rejected at upload (mission.ts guard).
+  disabledReason?: string
 }
 
 const ACTIONS: Record<ActionKey, ActionDef> = {
@@ -75,7 +78,9 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
     mavCmd: MAV_CMD.VTOL_TRANSITION,
     hasAlt: false,
     icon: '⇐',
-    group: 'vtol'
+    group: 'vtol',
+    disabledReason:
+      'FCC converts this into a FORWARD transition (param1 ignored). Back-transition is automatic on Land approach.'
   },
   VTOL_LAND: {
     label: 'Land',
@@ -111,7 +116,9 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
     mavCmd: MAV_CMD.RTL,
     hasAlt: false,
     icon: '⌂',
-    group: 'common'
+    group: 'common',
+    disabledReason:
+      'FCC converts this into a fly-to-position with raw (0,0,0) coords (~12,000 km). Use the RTL command button instead.'
   }
 }
 
@@ -1570,15 +1577,17 @@ export function MissionView() {
                         padding: '2px 0'
                       }}
                     >
-                      {ACTION_KEYS.map((k) => (
-                        <option
-                          key={k}
-                          value={k}
-                          style={{ color: ACTIONS[k].color, background: '#1e2318' }}
-                        >
-                          {ACTIONS[k].label}
-                        </option>
-                      ))}
+                      {ACTION_KEYS.filter((k) => !ACTIONS[k].disabledReason || k === wp.action).map(
+                        (k) => (
+                          <option
+                            key={k}
+                            value={k}
+                            style={{ color: ACTIONS[k].color, background: '#1e2318' }}
+                          >
+                            {ACTIONS[k].label}
+                          </option>
+                        )
+                      )}
                     </select>
                     <div style={{ display: 'flex', gap: '2px' }}>
                       <button
@@ -1832,7 +1841,9 @@ export function MissionView() {
                           marginBottom: isSelected ? '8px' : 0
                         }}
                       >
-                        {(['VTOL_TRANSITION_FW', 'VTOL_TRANSITION_MC'] as ActionKey[]).map((k) => (
+                        {(['VTOL_TRANSITION_FW', 'VTOL_TRANSITION_MC'] as ActionKey[])
+                          .filter((k) => !ACTIONS[k].disabledReason || k === wp.action)
+                          .map((k) => (
                           <button
                             key={k}
                             onClick={(e) => {
